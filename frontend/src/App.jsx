@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { apiUrl } from './api';
 
 export default function App() {
@@ -8,7 +8,7 @@ export default function App() {
   return (
     <div className="container">
       <h1>🍳 小红书食谱转换工具</h1>
-      <p className="subtitle">上传美食图片，AI 自动提取食材与步骤</p>
+      <p className="subtitle">粘贴小红书帖子链接，AI 自动整理成结构化食谱</p>
 
       <div className="tabs">
         <button
@@ -28,16 +28,10 @@ export default function App() {
 }
 
 function Extract({ onSaved }) {
-  const [mode, setMode] = useState('link');
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [sourceUrl, setSourceUrl] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
-  const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState(null);
   const [error, setError] = useState(null);
-  const inputRef = useRef(null);
 
   const fromLink = async () => {
     if (!linkUrl.trim()) return;
@@ -61,41 +55,6 @@ function Extract({ onSaved }) {
     }
   };
 
-  const handleFile = (f) => {
-    if (!f) return;
-    setFile(f);
-    setRecipe(null);
-    setError(null);
-    if (f.type.startsWith('image/')) setPreview(URL.createObjectURL(f));
-    else setPreview(null);
-  };
-
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    handleFile(e.dataTransfer.files[0]);
-  };
-
-  const extract = async () => {
-    if (!file) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const fd = new FormData();
-      fd.append('media', file);
-      if (sourceUrl.trim()) fd.append('sourceUrl', sourceUrl.trim());
-      const res = await fetch(apiUrl('/api/recipe/extract'), { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '识别失败');
-      setRecipe(data.recipe);
-      onSaved?.();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const exportJSON = () => {
     if (!recipe) return;
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
@@ -107,84 +66,29 @@ function Extract({ onSaved }) {
     URL.revokeObjectURL(url);
   };
 
-  const reset = () => {
-    setFile(null); setPreview(null); setRecipe(null); setError(null); setSourceUrl('');
-  };
-
   return (
     <>
-      <div className="mode-switch">
-        <button
-          className={mode === 'link' ? 'mode active' : 'mode'}
-          onClick={() => setMode('link')}
-        >🔗 粘贴链接</button>
-        <button
-          className={mode === 'image' ? 'mode active' : 'mode'}
-          onClick={() => setMode('image')}
-        >📸 上传图片</button>
-      </div>
-
-      {mode === 'link' && (
-        <div className="link-mode">
-          <div className="url-input">
-            <label>小红书帖子链接</label>
-            <input
-              type="url"
-              placeholder="https://www.xiaohongshu.com/explore/..."
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-            />
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <button onClick={fromLink} disabled={!linkUrl.trim() || loading}>
-              {loading ? '抓取中...' : '✨ 抓取并提取食谱'}
-            </button>
-            {linkUrl && <button className="ghost" onClick={() => { setLinkUrl(''); setRecipe(null); setError(null); }}>清除</button>}
-          </div>
-          <p className="hint" style={{ marginTop: 12 }}>
-            首次使用前需将小红书 cookies 保存到 <code>backend/cookies.txt</code>
-          </p>
+      <div className="link-mode">
+        <div className="url-input">
+          <label>🔗 小红书帖子链接</label>
+          <input
+            type="url"
+            placeholder="https://www.xiaohongshu.com/explore/..."
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+          />
         </div>
-      )}
-
-      {mode === 'image' && <>
-      <div
-        className={`dropzone ${dragging ? 'dragging' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*,video/*"
-          style={{ display: 'none' }}
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-        <p style={{ fontSize: 18 }}>📸 拖拽或点击上传图片</p>
-        <p className="hint">支持 JPG / PNG / WEBP（视频请先截取关键帧）</p>
-        {file && <p style={{ marginTop: 12, color: '#ff2442' }}>已选择：{file.name}</p>}
-        {preview && <img src={preview} className="preview" alt="预览" />}
+        <div style={{ marginTop: 16 }}>
+          <button onClick={fromLink} disabled={!linkUrl.trim() || loading}>
+            {loading ? '抓取中...' : '✨ 抓取并提取食谱'}
+          </button>
+          {linkUrl && (
+            <button className="ghost" onClick={() => { setLinkUrl(''); setRecipe(null); setError(null); }}>
+              清除
+            </button>
+          )}
+        </div>
       </div>
-
-      <div className="url-input">
-        <label>🔗 原帖链接（可选）</label>
-        <input
-          type="url"
-          placeholder="粘贴小红书帖子链接，方便回看原视频"
-          value={sourceUrl}
-          onChange={(e) => setSourceUrl(e.target.value)}
-        />
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        <button onClick={extract} disabled={!file || loading}>
-          {loading ? '识别中...' : '✨ 提取食谱'}
-        </button>
-        {file && <button className="ghost" onClick={reset}>清除</button>}
-      </div>
-      </>}
 
       {loading && <p className="loading">Claude 正在分析，请稍候...</p>}
       {error && <div className="error">❌ {error}</div>}

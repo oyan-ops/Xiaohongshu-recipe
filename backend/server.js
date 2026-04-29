@@ -1,10 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
-import fs from 'fs';
-import path from 'path';
 import { fetchXhsPost } from './lib/xhs.js';
 import { insertRecipe, listRecipes, getRecipe, deleteRecipe } from './lib/db.js';
 
@@ -12,15 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-
-const uploadDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-
-const upload = multer({
-  dest: uploadDir,
-  limits: { fileSize: 100 * 1024 * 1024 },
-});
+app.use(express.json({ limit: '10mb' }));
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -50,56 +39,6 @@ function parseRecipeJson(text) {
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
 }
-
-app.post('/api/recipe/extract', upload.single('media'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: '未上传文件' });
-
-  const filePath = req.file.path;
-  try {
-    const mimeType = req.file.mimetype;
-
-    if (mimeType.startsWith('video/')) {
-      fs.unlinkSync(filePath);
-      return res.status(400).json({
-        error: '视频暂不支持直接识别，请上传截图或关键帧图片',
-      });
-    }
-
-    if (!mimeType.startsWith('image/')) {
-      fs.unlinkSync(filePath);
-      return res.status(400).json({ error: '仅支持图片文件' });
-    }
-
-    const imageData = fs.readFileSync(filePath).toString('base64');
-
-    const message = await anthropic.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageData } },
-            { type: 'text', text: RECIPE_PROMPT },
-          ],
-        },
-      ],
-    });
-
-    fs.unlinkSync(filePath);
-
-    const parsed = parseRecipeJson(message.content[0].text);
-    if (!parsed) return res.status(500).json({ error: '无法解析模型返回内容' });
-
-    parsed.sourceUrl = (req.body.sourceUrl || '').trim() || null;
-    const saved = await insertRecipe(parsed);
-    res.json({ success: true, recipe: saved });
-  } catch (err) {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.post('/api/recipe/from-link', async (req, res) => {
   const url = (req.body?.url || '').trim();
