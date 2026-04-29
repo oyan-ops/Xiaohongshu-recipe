@@ -63,8 +63,10 @@ function Extract({ onSaved }) {
   };
 
   const fromLink = () => {
-    if (!linkUrl.trim()) return;
-    runExtract(linkUrl.trim());
+    const raw = linkUrl.trim();
+    if (!raw) return;
+    const url = extractXhsUrl(raw) || raw;
+    runExtract(url);
   };
 
   // 处理 PWA share target：从 URL 参数里捞小红书链接，自动跑
@@ -96,8 +98,8 @@ function Extract({ onSaved }) {
         <div className="url-input">
           <label>🔗 小红书帖子链接</label>
           <input
-            type="url"
-            placeholder="https://www.xiaohongshu.com/explore/..."
+            type="text"
+            placeholder="粘贴小红书链接或整段分享文字"
             value={linkUrl}
             onChange={(e) => setLinkUrl(e.target.value)}
           />
