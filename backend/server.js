@@ -3,7 +3,7 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
-import { insertRecipe, listRecipes, getRecipe, deleteRecipe } from './lib/db.js';
+import { insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource } from './lib/db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -66,6 +66,11 @@ app.post('/api/recipe/from-link', async (req, res) => {
 
   try {
     const post = await fetchXhsPost(url);
+
+    const existing = await findRecipesBySource(post.sourceUrl, post.noteId);
+    if (existing.length > 0) {
+      return res.json({ success: true, recipes: existing, count: existing.length, duplicate: true });
+    }
 
     const imageUrls = (post.images || []).slice(0, MAX_IMAGES);
     const imageBlocks = (await Promise.all(imageUrls.map(fetchImageBlock))).filter(Boolean);

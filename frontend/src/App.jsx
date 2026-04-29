@@ -57,12 +57,13 @@ function Extract({ onExtracted }) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [clipHint, setClipHint] = useState('');
 
   const submit = async (raw) => {
     const target = extractXhsUrl(raw) || (raw || '').trim();
     if (!target) return;
-    setLoading(true); setError(null); setDone(false);
+    setLoading(true); setError(null); setStatus(null); setClipHint('');
     try {
       const res = await fetch(apiUrl('/api/recipe/from-link'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -70,10 +71,25 @@ function Extract({ onExtracted }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '抓取失败');
-      setDone(true);
+      const n = data.count || 1;
+      setStatus(data.duplicate
+        ? `这条之前抓过了,直接打开${n > 1 ? `（${n} 道菜）` : ''}`
+        : `已保存${n > 1 ? ` ${n} 道菜` : ''},正在跳转到「我的食谱」`);
       onExtracted?.();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
+  };
+
+  const pasteAndExtract = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const found = extractXhsUrl(text);
+      if (found) { setUrl(found); submit(found); }
+      else if (text?.trim()) { setUrl(text.trim()); setError('剪贴板里没有小红书链接'); }
+      else setError('剪贴板是空的');
+    } catch {
+      setError('无法读取剪贴板,请手动粘贴');
+    }
   };
 
   useEffect(() => {
@@ -83,11 +99,30 @@ function Extract({ onExtracted }) {
       setUrl(found);
       submit(found);
       window.history.replaceState({}, '', '/');
+      return;
     }
+    // best-effort 自动检查剪贴板（多数浏览器需要用户手势,失败就降级到提示按钮）
+    (async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        const f = extractXhsUrl(text);
+        if (f) setClipHint(f);
+      } catch { /* 没权限就算了 */ }
+    })();
   }, []);
 
   return (
     <div>
+      {clipHint && !url && (
+        <button
+          className="banner success"
+          style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginTop: 0, marginBottom: 16 }}
+          onClick={() => { setUrl(clipHint); submit(clipHint); }}
+        >
+          检测到剪贴板里有小红书链接,点击直接提取 →
+        </button>
+      )}
+
       <div className="field" style={{ marginBottom: 16 }}>
         <label>链接 / 分享文字</label>
         <input
@@ -98,12 +133,17 @@ function Extract({ onExtracted }) {
           placeholder="粘贴小红书链接或整段分享文字"
         />
       </div>
-      <button className="btn coral" onClick={() => submit(url)} disabled={!url.trim() || loading}>
-        {loading ? '抓取中…' : '抓取并提取'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button className="btn coral" onClick={() => submit(url)} disabled={!url.trim() || loading}>
+          {loading ? '抓取中…' : '抓取并提取'}
+        </button>
+        <button className="btn ghost" onClick={pasteAndExtract} disabled={loading}>
+          从剪贴板粘贴
+        </button>
+      </div>
 
       {error && <div className="banner error">{error}</div>}
-      {done && !error && <div className="banner success">已保存,正在跳转到「我的食谱」</div>}
+      {status && !error && <div className="banner success">{status}</div>}
     </div>
   );
 }

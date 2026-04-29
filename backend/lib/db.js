@@ -80,6 +80,20 @@ export async function getRecipe(id) {
   return data ? fromRow(data) : null;
 }
 
+export async function findRecipesBySource(sourceUrl, noteId) {
+  const ors = [];
+  if (sourceUrl) ors.push(`source_url.eq.${sourceUrl}`);
+  if (noteId) ors.push(`source_url.ilike.%${noteId}%`);
+  if (ors.length === 0) return [];
+  const { data, error } = await supabase
+    .from('recipes')
+    .select('*')
+    .or(ors.join(','))
+    .order('extracted_at', { ascending: false });
+  if (error) throw new Error('查重失败：' + error.message);
+  return (data || []).map(fromRow);
+}
+
 export async function deleteRecipe(id) {
   const { error, count } = await supabase
     .from('recipes')
