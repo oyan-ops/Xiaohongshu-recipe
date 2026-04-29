@@ -1,0 +1,11 @@
+node_modules
+.DS_Store
+.env
+cookies.txt
+backend/uploads
+backend/data
+backend/cookies.txt
+backend/.env
+*.migrated
+dist
+.vite
