@@ -27,14 +27,21 @@ export default function App() {
   );
 }
 
+const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
+
+function extractXhsUrl(text) {
+  if (!text) return '';
+  const m = text.match(XHS_URL_RE);
+  return m ? m[0] : '';
+}
+
 function Extract({ onSaved }) {
   const [linkUrl, setLinkUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState(null);
   const [error, setError] = useState(null);
 
-  const fromLink = async () => {
-    if (!linkUrl.trim()) return;
+  const runExtract = async (url) => {
     setLoading(true);
     setError(null);
     setRecipe(null);
@@ -42,7 +49,7 @@ function Extract({ onSaved }) {
       const res = await fetch(apiUrl('/api/recipe/from-link'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: linkUrl.trim() }),
+        body: JSON.stringify({ url }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '抓取失败');
@@ -54,6 +61,23 @@ function Extract({ onSaved }) {
       setLoading(false);
     }
   };
+
+  const fromLink = () => {
+    if (!linkUrl.trim()) return;
+    runExtract(linkUrl.trim());
+  };
+
+  // 处理 PWA share target：从 URL 参数里捞小红书链接，自动跑
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const candidate = params.get('url') || params.get('text') || params.get('title') || '';
+    const found = extractXhsUrl(candidate);
+    if (found) {
+      setLinkUrl(found);
+      runExtract(found);
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
 
   const exportJSON = () => {
     if (!recipe) return;
