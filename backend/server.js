@@ -13,31 +13,51 @@ app.use(express.json({ limit: '10mb' }));
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const RECIPE_PROMPT = `你是一位专业的中文菜谱整理师。请仔细分析这张小红书美食图片，识别其中的菜品并提取完整食谱信息。
+const RECIPE_PROMPT = `你是一位专业的中文菜谱整理师。请仔细分析这个小红书帖子（图片 + 文字），识别其中包含的所有菜品。
 
-请严格以 JSON 格式返回，不要包含任何其他文字或 markdown 代码块标记，结构如下：
+**重要**：一个帖子可能包含一道菜或多道菜（合集/食谱集）。请逐一识别每一道独立的菜品。
+
+请严格以 JSON 格式返回（不要 markdown 代码块），结构是一个数组，每个元素是一道菜：
 {
-  "title": "菜品名称",
-  "description": "简短描述",
-  "servings": "份量（如：2人份）",
-  "prepTime": "准备时间",
-  "cookTime": "烹饪时间",
-  "ingredients": [
-    {"name": "食材名", "amount": "用量", "notes": "备注（可选）"}
-  ],
-  "steps": [
-    {"step": 1, "description": "步骤描述", "tips": "小贴士（可选）"}
-  ],
-  "tags": ["标签1", "标签2"],
-  "tips": ["整体建议1", "建议2"]
+  "recipes": [
+    {
+      "title": "菜品名称",
+      "description": "简短描述",
+      "servings": "份量",
+      "prepTime": "准备时间",
+      "cookTime": "烹饪时间",
+      "imageIndex": 0,
+      "ingredients": [{"name": "食材名", "amount": "用量", "notes": "备注（可选）"}],
+      "steps": [{"step": 1, "description": "步骤描述", "tips": "小贴士（可选）"}],
+      "tags": ["标签1", "标签2"],
+      "tips": ["整体建议1"]
+    }
+  ]
 }
 
-如果图片中信息不完整，请根据菜品常识合理补充。所有内容使用中文。`;
+**imageIndex 说明**：图片按顺序输入（从 0 开始），请为每道菜选一张最能代表它的图片，填入它的 index。如果不确定，用 0。
+
+如果只有一道菜，数组里就只放一条。所有内容使用中文。`;
 
 function parseRecipeJson(text) {
   const jsonMatch = text.trim().match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
   return JSON.parse(jsonMatch[0]);
+}
+
+const MAX_IMAGES = 6;
+
+async function fetchImageBlock(url) {
+  try {
+    const r = await fetch(url, { headers: { 'Referer': 'https://www.xiaohongshu.com/' } });
+    if (!r.ok) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    const mediaType = r.headers.get('content-type') || 'image/jpeg';
+    return {
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') },
+    };
+  } catch (_) { return null; }
 }
 
 app.post('/api/recipe/from-link', async (req, res) => {
@@ -47,27 +67,16 @@ app.post('/api/recipe/from-link', async (req, res) => {
   try {
     const post = await fetchXhsPost(url);
 
-    const content = [];
-    if (post.coverImage) {
-      try {
-        const imgResp = await fetch(post.coverImage, {
-          headers: { 'Referer': 'https://www.xiaohongshu.com/' },
-        });
-        if (imgResp.ok) {
-          const buf = Buffer.from(await imgResp.arrayBuffer());
-          const mediaType = imgResp.headers.get('content-type') || 'image/jpeg';
-          content.push({
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: buf.toString('base64') },
-          });
-        }
-      } catch (_) { /* 封面图拿不到就靠文字 */ }
-    }
+    const imageUrls = (post.images || []).slice(0, MAX_IMAGES);
+    const imageBlocks = (await Promise.all(imageUrls.map(fetchImageBlock))).filter(Boolean);
 
-    content.push({
-      type: 'text',
-      text: `${RECIPE_PROMPT}\n\n---\n帖子标题：${post.title}\n作者：${post.author}\n正文：${post.desc}`,
-    });
+    const content = [
+      ...imageBlocks,
+      {
+        type: 'text',
+        text: `${RECIPE_PROMPT}\n\n---\n帖子标题：${post.title}\n作者：${post.author}\n正文：${post.desc}\n\n共输入 ${imageBlocks.length} 张图片（index 0 到 ${imageBlocks.length - 1}）。`,
+      },
+    ];
 
     const message = await anthropic.messages.create({
       model: 'claude-opus-4-7',
@@ -78,13 +87,25 @@ app.post('/api/recipe/from-link', async (req, res) => {
     const parsed = parseRecipeJson(message.content[0].text);
     if (!parsed) return res.status(500).json({ error: '无法解析模型返回内容' });
 
-    parsed.sourceUrl = post.sourceUrl;
-    parsed.videoUrl = post.videoUrl;
-    parsed.coverImage = post.coverImage;
-    parsed.author = post.author;
+    const recipes = Array.isArray(parsed.recipes) && parsed.recipes.length > 0
+      ? parsed.recipes
+      : [parsed];
 
-    const saved = await insertRecipe(parsed);
-    res.json({ success: true, recipe: saved });
+    const saved = [];
+    for (const r of recipes) {
+      const idx = Number.isInteger(r.imageIndex) ? r.imageIndex : 0;
+      const dishImage = imageUrls[idx] || post.coverImage || null;
+      const row = await insertRecipe({
+        ...r,
+        sourceUrl: post.sourceUrl,
+        videoUrl: post.videoUrl,
+        coverImage: dishImage,
+        author: post.author,
+      });
+      saved.push(row);
+    }
+
+    res.json({ success: true, recipes: saved, count: saved.length });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

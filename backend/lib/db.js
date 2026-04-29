@@ -53,7 +53,7 @@ export async function insertRecipe(recipe) {
 export async function listRecipes() {
   const { data, error } = await supabase
     .from('recipes')
-    .select('id,title,description,tags,source_url,extracted_at')
+    .select('id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
     .order('extracted_at', { ascending: false });
   if (error) throw new Error('读取失败：' + error.message);
   return data.map((r) => ({
@@ -62,6 +62,10 @@ export async function listRecipes() {
     description: r.description,
     tags: r.tags || [],
     sourceUrl: r.source_url,
+    coverImage: r.cover_image,
+    prepTime: r.prep_time,
+    cookTime: r.cook_time,
+    servings: r.servings,
     extractedAt: r.extracted_at,
   }));
 }

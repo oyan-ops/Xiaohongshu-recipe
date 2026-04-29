@@ -155,12 +155,17 @@ function Library({ recipes, loading, reload }) {
         <div className="cards">
           {filtered.map(r => (
             <div key={r.id} className="card" onClick={() => open(r.id)}>
-              <div className="card-title">{r.title || '未命名'}</div>
-              {r.description && <div className="card-desc">{r.description}</div>}
-              <div className="card-meta">
-                {r.prepTime && <span>准备 {r.prepTime}</span>}
-                {r.cookTime && <><span className="dot">·</span><span>烹饪 {r.cookTime}</span></>}
-                {r.servings && <><span className="dot">·</span><span>{r.servings}</span></>}
+              {r.coverImage
+                ? <img className="card-img" src={r.coverImage} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                : <div className="card-img placeholder" />}
+              <div className="card-body">
+                <div className="card-title">{r.title || '未命名'}</div>
+                {r.description && <div className="card-desc">{r.description}</div>}
+                <div className="card-meta">
+                  {r.prepTime && <span>准备 {r.prepTime}</span>}
+                  {r.cookTime && <><span className="dot">·</span><span>烹饪 {r.cookTime}</span></>}
+                  {r.servings && <><span className="dot">·</span><span>{r.servings}</span></>}
+                </div>
               </div>
             </div>
           ))}
@@ -186,6 +191,9 @@ function RecipeDetail({ recipe, onClose, onDelete }) {
       <div className="sheet" onClick={e => e.stopPropagation()}>
         <div className="sheet-head">
           <button className="sheet-close" onClick={onClose}>✕</button>
+          {recipe.coverImage && (
+            <img className="sheet-img" src={recipe.coverImage} alt="" referrerPolicy="no-referrer" />
+          )}
           <h2>{recipe.title || '未命名'}</h2>
           {recipe.description && <p className="desc">{recipe.description}</p>}
           {recipe.author && <p className="author">— {recipe.author}</p>}

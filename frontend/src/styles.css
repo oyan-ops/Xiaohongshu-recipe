@@ -195,12 +195,34 @@ main { padding: 32px 0 64px; }
   background: var(--cream-card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 20px;
   cursor: pointer;
   transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  overflow: hidden;
+}
+.card-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--line-soft);
+}
+.card-img.placeholder { background: var(--line-soft); }
+.card-body {
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+.sheet-img {
+  width: calc(100% + 56px);
+  margin: -36px -28px 20px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  display: block;
+  background: var(--line-soft);
 }
 .card:hover {
   border-color: var(--ink-soft);
