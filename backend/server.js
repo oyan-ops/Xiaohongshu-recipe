@@ -89,10 +89,10 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
   if (!url) return res.status(400).json({ error: '缺少链接' });
 
   try {
-    if (!folderId) {
-      const f = await ensureDefaultFolder(req.client, req.userId);
-      folderId = f.id;
-    }
+    // Always run ensureDefaultFolder — it backfills orphan recipes into the
+    // default folder, even when the client supplies an explicit folderId.
+    const def = await ensureDefaultFolder(req.client, req.userId);
+    if (!folderId) folderId = def.id;
 
     const post = await fetchXhsPost(url);
 
