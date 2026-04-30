@@ -464,6 +464,42 @@ main { padding: 32px 0 64px; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
 
+@media (max-width: 640px) {
+  .sheet {
+    max-height: 100vh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top);
+  }
+  .sheet-head {
+    padding: 16px 20px 16px;
+  }
+  .sheet-close {
+    top: calc(env(safe-area-inset-top) + 12px);
+    right: 14px;
+  }
+  .sheet h2 {
+    font-size: 22px;
+    margin-bottom: 6px;
+    margin-right: 36px;
+  }
+  .sheet .desc { font-size: 14px; }
+  .sheet-img {
+    width: calc(100% + 40px);
+    margin: -16px -20px 14px;
+    aspect-ratio: 3 / 2;
+    max-height: 36vh;
+  }
+  .sheet-body {
+    padding: 18px 20px calc(28px + env(safe-area-inset-bottom));
+    gap: 22px;
+  }
+  .stats { gap: 16px; }
+  .block h3 { font-size: 16px; margin-bottom: 10px; }
+  .step { font-size: 14px; }
+  .step-num { font-size: 16px; width: 20px; }
+}
+
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes sheetUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
