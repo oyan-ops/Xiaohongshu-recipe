@@ -435,7 +435,8 @@ app.post('/api/plans/invite', requireAuth, async (req, res) => {
   try {
     const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
     const ttlDays = Number.isFinite(+req.body?.ttlDays) ? +req.body.ttlDays : 7;
-    const invite = await createPlanInvite(req.client, req.userId, role, ttlDays);
+    const dates = Array.isArray(req.body?.dates) ? req.body.dates : null;
+    const invite = await createPlanInvite(req.client, req.userId, role, ttlDays, dates);
     res.json({ invite });
   } catch (err) {
     res.status(500).json({ error: err.message });

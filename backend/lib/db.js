@@ -375,7 +375,7 @@ export async function findRecipesBySource(client, sourceUrl, noteId) {
   return Array.from(collected.values()).map(fromRow);
 }
 
-export async function createPlanInvite(client, userId, role, ttlDays) {
+export async function createPlanInvite(client, userId, role, ttlDays, dates) {
   const token = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) +
     Math.random().toString(36).slice(2);
   const expires_at = ttlDays > 0
@@ -383,17 +383,17 @@ export async function createPlanInvite(client, userId, role, ttlDays) {
     : null;
   const { data, error } = await client
     .from('plan_invites')
-    .insert({ token, owner_id: userId, role, created_by: userId, expires_at })
+    .insert({ token, owner_id: userId, role, created_by: userId, expires_at, dates: dates || null })
     .select()
     .single();
   if (error) throw new Error('创建邀请失败：' + error.message);
-  return { token: data.token, role: data.role, expiresAt: data.expires_at };
+  return { token: data.token, role: data.role, expiresAt: data.expires_at, dates: data.dates };
 }
 
 export async function readPlanInvite(adminClient, token) {
   const { data, error } = await adminClient
     .from('plan_invites')
-    .select('token, owner_id, role, expires_at')
+    .select('token, owner_id, role, expires_at, dates')
     .eq('token', token)
     .maybeSingle();
   if (error) throw new Error('读取邀请失败：' + error.message);
@@ -408,6 +408,7 @@ export async function readPlanInvite(adminClient, token) {
     ownerEmail: owner.email,
     role: data.role,
     expiresAt: data.expires_at,
+    dates: data.dates,
   };
 }
 

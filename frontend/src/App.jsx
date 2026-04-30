@@ -149,7 +149,21 @@ function PlanInvitePage({ token, session }) {
         {invite && (
           <>
             <p style={{ color: 'var(--ink-soft)', maxWidth: 380, lineHeight: 1.6 }}>
-              <strong>{invite.ownerName || invite.ownerEmail || '某用户'}</strong> 邀请你查看他们的做菜计划
+              <strong>{invite.ownerName || invite.ownerEmail || '某用户'}</strong> 邀请你
+              {invite.dates && invite.dates.length > 0 ? (
+                <>
+                  查看 <strong>{new Date(invite.dates[0] + 'T00:00:00').getMonth() + 1}月{new Date(invite.dates[0] + 'T00:00:00').getDate()}日
+                  {invite.dates.length > 1 ? (
+                    invite.dates.length === new Date(invite.dates[invite.dates.length - 1]).getDate() - new Date(invite.dates[0]).getDate() + 1 ? (
+                      <>–{new Date(invite.dates[invite.dates.length - 1] + 'T00:00:00').getMonth() + 1}月{new Date(invite.dates[invite.dates.length - 1] + 'T00:00:00').getDate()}日</>
+                    ) : (
+                      <>等 {invite.dates.length} 天</>
+                    )
+                  ) : null}</strong> 的做菜计划
+                </>
+              ) : (
+                <>查看他们的做菜计划</>
+              )}
               ,权限为 <strong>{invite.role === 'editor' ? '可编辑' : '只读'}</strong>。
             </p>
             <button className="btn coral" onClick={accept} disabled={accepting} style={{ padding: '14px 24px' }}>
@@ -712,9 +726,6 @@ function PlanView({ cart, mode, session }) {
             : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
           }
         </div>
-        {mode === 'plan' && (
-          <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowShare(true)}>共享</button>
-        )}
       </div>
 
       {mode === 'history' && <HeatMap plans={plans} />}
@@ -775,6 +786,8 @@ function PlanView({ cart, mode, session }) {
                 <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
                   onClick={() => addAllToCart(selectedList.map(p => p.recipeId))}>全部加入菜单</button>
               )}
+              <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                onClick={() => setShowShare(true)}>共享这几天</button>
               {allowEdit && (
                 <button className="btn coral" style={{ padding: '6px 14px', fontSize: 12 }}
                   onClick={() => setShowPicker(selectedDate)}>+ 加菜</button>
@@ -834,6 +847,7 @@ function PlanView({ cart, mode, session }) {
       )}
       {showShare && (
         <PlanShareModal
+          initialDate={selectedDate}
           onClose={() => setShowShare(false)}
           onMemberRemoved={load}
         />
@@ -912,13 +926,17 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
   );
 }
 
-function PlanShareModal({ onClose, onMemberRemoved }) {
+function PlanShareModal({ initialDate, onClose, onMemberRemoved }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [invite, setInvite] = useState(null);
   const [inviteRole, setInviteRole] = useState('editor');
   const [copied, setCopied] = useState(false);
+  const [dateMode, setDateMode] = useState('range');
+  const [dateFrom, setDateFrom] = useState(initialDate || todayISO());
+  const [dateTo, setDateTo] = useState(initialDate || todayISO());
+  const [pickedDates, setPickedDates] = useState(new Set([initialDate || todayISO()]));
 
   useEffect(() => {
     const load = async () => {
@@ -931,13 +949,29 @@ function PlanShareModal({ onClose, onMemberRemoved }) {
     load();
   }, []);
 
+  const getSelectedDates = () => {
+    if (dateMode === 'range') {
+      const dates = [];
+      const from = new Date(dateFrom);
+      const to = new Date(dateTo);
+      for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+        dates.push(isoFor(d));
+      }
+      return dates;
+    } else {
+      return Array.from(pickedDates).sort();
+    }
+  };
+
   const createInvite = async () => {
+    const dates = getSelectedDates();
+    if (dates.length === 0) { alert('请选择至少一天'); return; }
     setGenerating(true);
     try {
       const res = await authFetch('/api/plans/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: inviteRole, ttlDays: 7 }),
+        body: JSON.stringify({ role: inviteRole, ttlDays: 7, dates }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -998,33 +1032,121 @@ function PlanShareModal({ onClose, onMemberRemoved }) {
               )}
 
               <div>
-                <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>生成邀请链接</h3>
-                {!invite ? (
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                    <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ flex: 1 }}>
-                      <option value="editor">可编辑</option>
-                      <option value="viewer">只读</option>
-                    </select>
-                    <button className="btn coral" onClick={createInvite} disabled={generating} style={{ padding: '8px 14px' }}>
-                      {generating ? '生成中…' : '生成'}
-                    </button>
+                <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>选择共享日期</h3>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <button
+                    className={`btn ghost`}
+                    onClick={() => setDateMode('range')}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: 12, opacity: dateMode === 'range' ? 1 : 0.5 }}
+                  >
+                    日期范围
+                  </button>
+                  <button
+                    className={`btn ghost`}
+                    onClick={() => setDateMode('pick')}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: 12, opacity: dateMode === 'pick' ? 1 : 0.5 }}
+                  >
+                    指定日期
+                  </button>
+                </div>
+                {dateMode === 'range' ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateFrom}
+                      onChange={e => setDateFrom(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>至</span>
+                    <input
+                      type="date"
+                      className="input"
+                      value={dateTo}
+                      onChange={e => setDateTo(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
                   </div>
                 ) : (
-                  <div style={{ padding: 12, backgroundColor: 'var(--bg-mute)', borderRadius: 8, borderLeft: '3px solid var(--primary)' }}>
-                    <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>邀请链接（7天有效）：</div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ marginBottom: 8, display: 'flex', gap: 8 }}>
                       <input
+                        type="date"
                         className="input"
-                        value={`${window.location.origin}/plan-invite/${invite.token}`}
-                        readOnly
-                        style={{ flex: 1, fontSize: 11 }}
+                        onChange={e => {
+                          if (e.target.value) {
+                            const s = new Set(pickedDates);
+                            s.add(e.target.value);
+                            setPickedDates(s);
+                            e.target.value = '';
+                          }
+                        }}
+                        style={{ flex: 1 }}
                       />
-                      <button className="btn coral" onClick={copyLink} style={{ padding: '8px 12px', fontSize: 11, whiteSpace: 'nowrap' }}>
-                        {copied ? '已复制' : '复制'}
+                      <button className="btn ghost" style={{ padding: '8px 12px', fontSize: 12, whiteSpace: 'nowrap' }}
+                        onClick={() => setPickedDates(new Set([initialDate || todayISO()]))}>
+                        清除
                       </button>
+                    </div>
+                    <div style={{ padding: 12, backgroundColor: 'var(--bg-mute)', borderRadius: 8, maxHeight: 160, overflowY: 'auto' }}>
+                      {pickedDates.size === 0 ? (
+                        <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>还未选择日期</div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>已选 {pickedDates.size} 天</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {Array.from(pickedDates).sort().map(d => (
+                              <div
+                                key={d}
+                                style={{
+                                  padding: '4px 8px', backgroundColor: '#E8F4F8', borderRadius: 4, fontSize: 11,
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4
+                                }}
+                                onClick={() => { const s = new Set(pickedDates); s.delete(d); setPickedDates(s); }}
+                              >
+                                {new Date(d + 'T00:00:00').getMonth() + 1}月{new Date(d + 'T00:00:00').getDate()}日
+                                <span style={{ marginLeft: 2 }}>✕</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
+                <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ink-mute)' }}>
+                  已选 {dateMode === 'range' ? getSelectedDates().length : pickedDates.size} 天
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>生成邀请链接</h3>
+                  {!invite ? (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                      <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ flex: 1 }}>
+                        <option value="editor">可编辑</option>
+                        <option value="viewer">只读</option>
+                      </select>
+                      <button className="btn coral" onClick={createInvite} disabled={generating} style={{ padding: '8px 14px' }}>
+                        {generating ? '生成中…' : '生成'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ padding: 12, backgroundColor: 'var(--bg-mute)', borderRadius: 8, borderLeft: '3px solid var(--primary)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>邀请链接（7天有效）：</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          className="input"
+                          value={`${window.location.origin}/plan-invite/${invite.token}`}
+                          readOnly
+                          style={{ flex: 1, fontSize: 11 }}
+                        />
+                        <button className="btn coral" onClick={copyLink} style={{ padding: '8px 12px', fontSize: 11, whiteSpace: 'nowrap' }}>
+                          {copied ? '已复制' : '复制'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
