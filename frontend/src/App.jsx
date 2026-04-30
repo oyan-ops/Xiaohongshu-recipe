@@ -328,34 +328,18 @@ function Main({ session }) {
   );
 }
 
-function TimingEditorModal({ plan, recipe, onSave, onClose }) {
-  const [eatTime, setEatTime] = useState(plan?.eatTime || '');
-  const [prepTime, setPrepTime] = useState(plan?.prepTimeMins || 0);
-  const [remindBefore, setRemindBefore] = useState(15);
+function MealTimeEditorModal({ date, mealKey, currentTime, onSave, onClose }) {
+  const [time, setTime] = useState(currentTime || '');
+  const labels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
+  const fieldMap = { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' };
 
-  const latestStartTime = (() => {
-    if (!eatTime || !recipe?.cookTime) return null;
-    const [h, m] = eatTime.split(':').map(Number);
-    const cookMins = parseMinutes(recipe.cookTime) || 30;
-    const totalMins = cookMins + (prepTime || 0);
-    const startDate = new Date();
-    startDate.setHours(h, m, 0);
-    startDate.setMinutes(startDate.getMinutes() - totalMins);
-    return startDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  })();
-
-  const handleSave = async () => {
-    if (!eatTime) {
-      alert('请设置吃饭时间');
-      return;
-    }
+  const save = async () => {
     try {
-      const resp = await authFetch(`/api/plans/${plan.id}/timing`, {
+      await authFetch(`/api/day-settings/${date}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eatTime, prepTimeMins: prepTime })
+        body: JSON.stringify({ [fieldMap[mealKey]]: time || null }),
       });
-      localStorage.setItem(`reminder_${plan.id}`, JSON.stringify({ remindBefore }));
       onSave();
     } catch (e) {
       alert('保存失败：' + e.message);
@@ -367,75 +351,14 @@ function TimingEditorModal({ plan, recipe, onSave, onClose }) {
       <div className="sheet" onClick={e => e.stopPropagation()}>
         <div className="sheet-head">
           <button className="sheet-close" onClick={onClose}>✕</button>
-          <h2>设置吃饭提醒</h2>
-          <p className="desc">{recipe?.title || '菜谱'}</p>
+          <h2>设置{labels[mealKey]}时间</h2>
+          <p className="desc">{date}</p>
         </div>
-
         <div className="sheet-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {recipe?.cookTime && (
-            <div style={{ padding: '12px', backgroundColor: 'var(--bg-raised)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6 }}>烹饪时间</div>
-              <div style={{ fontSize: 18, fontWeight: 600 }}>{recipe.cookTime}</div>
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>
-              计划吃饭时间
-            </label>
-            <input
-              type="time"
-              value={eatTime}
-              onChange={(e) => setEatTime(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>
-              额外准备时间（分钟）
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {[0, 15, 30, 45].map(min => (
-                <button
-                  key={min}
-                  className={`btn ${prepTime === min ? 'coral' : 'ghost'}`}
-                  onClick={() => setPrepTime(min)}
-                  style={{ padding: '8px' }}
-                >
-                  {min}分钟
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {latestStartTime && (
-            <div style={{ padding: '12px', backgroundColor: '#FFF3E0', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 6 }}>最晚开始时间</div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#E65100' }}>{latestStartTime}</div>
-            </div>
-          )}
-
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>
-              提前多久提醒
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {[5, 15, 30].map(mins => (
-                <button
-                  key={mins}
-                  className={`btn ${remindBefore === mins ? 'coral' : 'ghost'}`}
-                  onClick={() => setRemindBefore(mins)}
-                  style={{ padding: '8px' }}
-                >
-                  提前{mins}分钟
-                </button>
-              ))}
-            </div>
-          </div>
-
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 16 }} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn coral" style={{ flex: 1 }} onClick={handleSave}>保存</button>
+            <button className="btn coral" style={{ flex: 1 }} onClick={save}>保存</button>
             <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>取消</button>
           </div>
         </div>
@@ -915,12 +838,14 @@ function PlanView({ cart, mode, session }) {
   const [showPicker, setShowPicker] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [userMap, setUserMap] = useState({});
+  const [daySettings, setDaySettings] = useState({});
+  const [showMealTimeEditor, setShowMealTimeEditor] = useState(null);
+  const [pendingMealType, setPendingMealType] = useState(null);
   const today = todayISO();
   const initialDate = today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
-  const [showTimingEditor, setShowTimingEditor] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -943,6 +868,10 @@ function PlanView({ cart, mode, session }) {
         const data = await res.json();
         setUserMap(data.users || {});
       }
+      // Fetch day settings
+      const dsRes = await authFetch(`/api/day-settings?from=${isoFor(start)}&to=${isoFor(end)}`);
+      const dsData = await dsRes.json();
+      setDaySettings(dsData.settings || {});
     } finally { setLoading(false); }
   };
 
@@ -951,16 +880,17 @@ function PlanView({ cart, mode, session }) {
   useEffect(() => {
     const checkReminders = () => {
       const now = new Date();
+      const mealTimeFieldMap = { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' };
       for (const p of plans) {
-        if (!p.eatTime || p.cooked) continue;
-        const remindConfig = JSON.parse(localStorage.getItem(`reminder_${p.id}`) || '{}');
-        const remindBefore = remindConfig.remindBefore || 15;
-        const [h, m] = p.eatTime.split(':').map(Number);
+        if (p.cooked) continue;
+        const ds = daySettings[p.date] || {};
+        const mealTime = ds[mealTimeFieldMap[p.mealType || 'dinner']];
+        if (!mealTime) continue;
+        const [h, m] = mealTime.split(':').map(Number);
         const cookMins = parseMinutes(p.recipe?.cookTime) || 30;
-        const totalMins = cookMins + (p.prepTimeMins || 0);
         const remindDate = new Date();
         remindDate.setHours(h, m, 0);
-        remindDate.setMinutes(remindDate.getMinutes() - totalMins - remindBefore);
+        remindDate.setMinutes(remindDate.getMinutes() - cookMins);
         const timeDiff = now.getTime() - remindDate.getTime();
         if (timeDiff >= 0 && timeDiff < 60000) {
           if (Notification && Notification.permission === 'granted') {
@@ -975,7 +905,7 @@ function PlanView({ cart, mode, session }) {
     const interval = setInterval(checkReminders, 30000);
     checkReminders();
     return () => clearInterval(interval);
-  }, [plans]);
+  }, [plans, daySettings]);
 
   const remove = async (planId) => {
     await authFetch(`/api/plans/${planId}`, { method: 'DELETE' });
@@ -1100,7 +1030,7 @@ function PlanView({ cart, mode, session }) {
                 onClick={() => setShowShare(true)}>共享计划</button>
               {allowEdit && (
                 <button className="btn coral" style={{ padding: '6px 14px', fontSize: 12 }}
-                  onClick={() => setShowPicker(selectedDate)}>+ 加菜</button>
+                  onClick={() => { setPendingMealType('dinner'); setShowPicker(selectedDate); }}>+ 加菜</button>
               )}
             </div>
           )}
@@ -1112,62 +1042,76 @@ function PlanView({ cart, mode, session }) {
             ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>
                 {mode === 'history' ? '这一天没有记录' : '这一天还没安排,点 + 加菜'}
               </p>
-            : (
-              <div className="plan-cards">
-                {selectedList.map((p) => {
-                  const owner = p.ownerId && userMap[p.ownerId];
-                  const ownerName = owner?.name || owner?.email || null;
-                  return (
-                    <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
-                      {mode === 'plan' && (
-                        <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
-                      )}
-                      {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
-                      <div className="plan-card-body">
-                        <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
-                        {ownerName && <div className="plan-card-label">{ownerName} 的菜</div>}
-                        {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
-                      </div>
-                      {mode === 'plan' && (
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', fontSize: 13 }}>
-                          {p.eatTime ? (
-                            <div style={{ color: 'var(--ink-soft)', marginBottom: 6 }}>
-                              吃饭时间：<strong>{p.eatTime}</strong>
-                              {p.prepTimeMins ? ` (准备 +${p.prepTimeMins} 分钟)` : ''}
-                            </div>
-                          ) : null}
-                          <button
-                            className="btn ghost"
-                            style={{ padding: '4px 8px', fontSize: 12 }}
-                            onClick={() => setShowTimingEditor(p.id)}
-                          >
-                            {p.eatTime ? '编辑提醒' : '设置吃饭时间'}
+            : (() => {
+              const MEALS = [
+                { key: 'breakfast', label: '早餐', timeField: 'breakfastTime' },
+                { key: 'lunch', label: '午餐', timeField: 'lunchTime' },
+                { key: 'dinner', label: '晚餐', timeField: 'dinnerTime' },
+              ];
+              const todaySettings = daySettings[selectedDate] || {};
+              return (
+                <div>
+                  {MEALS.map(meal => {
+                    const mealPlans = selectedList.filter(p => (p.mealType || 'dinner') === meal.key);
+                    const mealTime = todaySettings[meal.timeField];
+                    if (mealPlans.length === 0 && !mealTime) return null;
+                    return (
+                      <div key={meal.key} style={{ marginBottom: 20 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontWeight: 600, fontSize: 14 }}>{meal.label}</span>
+                          <button className="btn ghost" style={{ padding: '2px 8px', fontSize: 12 }}
+                            onClick={() => setShowMealTimeEditor({ date: selectedDate, mealKey: meal.key })}>
+                            {mealTime || '设置时间'}
                           </button>
+                          {mode === 'plan' && (
+                            <button className="btn ghost" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 12 }}
+                              onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+</button>
+                          )}
                         </div>
-                      )}
-                      {mode === 'plan' && (
-                        <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )
+                        <div className="plan-cards">
+                          {mealPlans.map((p) => {
+                            const owner = p.ownerId && userMap[p.ownerId];
+                            const ownerName = owner?.name || owner?.email || null;
+                            return (
+                              <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
+                                {mode === 'plan' && (
+                                  <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
+                                )}
+                                {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
+                                <div className="plan-card-body">
+                                  <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
+                                  {ownerName && <div className="plan-card-label">{ownerName} 的菜</div>}
+                                  {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
+                                </div>
+                                {mode === 'plan' && (
+                                  <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
         }
       </div>
 
       {showPicker && (
         <RecipePickerModal
           date={showPicker}
-          onClose={() => setShowPicker(null)}
+          onClose={() => { setShowPicker(null); setPendingMealType(null); }}
           onConfirm={async (recipeIds) => {
             for (const recipeId of recipeIds) {
               await authFetch('/api/plans', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipeId, date: showPicker }),
+                body: JSON.stringify({ recipeId, date: showPicker, mealType: pendingMealType || 'dinner' }),
               });
             }
             setShowPicker(null);
+            setPendingMealType(null);
             load();
           }}
         />
@@ -1179,12 +1123,15 @@ function PlanView({ cart, mode, session }) {
           onMemberRemoved={load}
         />
       )}
-      {showTimingEditor && (
-        <TimingEditorModal
-          plan={plans.find(p => p.id === showTimingEditor)}
-          recipe={plans.find(p => p.id === showTimingEditor)?.recipe}
-          onSave={() => { setShowTimingEditor(null); load(); }}
-          onClose={() => setShowTimingEditor(null)}
+      {showMealTimeEditor && (
+        <MealTimeEditorModal
+          date={showMealTimeEditor.date}
+          mealKey={showMealTimeEditor.mealKey}
+          currentTime={daySettings[showMealTimeEditor.date]?.[
+            { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' }[showMealTimeEditor.mealKey]
+          ]}
+          onSave={() => { setShowMealTimeEditor(null); load(); }}
+          onClose={() => setShowMealTimeEditor(null)}
         />
       )}
     </div>

@@ -11,6 +11,7 @@ import {
   getFolderMembers, removeFolderMember, getUserProfiles,
   listPlans, createPlan, deletePlan, updatePlanCooked, updatePlanTiming, readPlanTiming,
   createPlanInvite, readPlanInvite, acceptPlanInvite, listPlanMembers, removePlanMember, listSharedOwners,
+  getDaySettingsBatch, upsertDaySettings,
 } from './lib/db.js';
 
 const app = express();
@@ -411,9 +412,10 @@ app.get('/api/plans', requireAuth, async (req, res) => {
 app.post('/api/plans', requireAuth, async (req, res) => {
   const recipeId = req.body?.recipeId;
   const date = req.body?.date;
+  const mealType = req.body?.mealType || 'dinner';
   if (!recipeId || !date) return res.status(400).json({ error: '缺少 recipeId 或 date' });
   try {
-    const plan = await createPlan(req.client, req.userId, recipeId, date);
+    const plan = await createPlan(req.client, req.userId, recipeId, date, mealType);
     res.json({ plan, duplicate: !plan });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -584,6 +586,36 @@ app.post('/api/recipes/evaluate-all', requireAuth, async (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ id: req.userId, email: req.userEmail });
+});
+
+app.get('/api/day-settings', requireAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: '缺少 from 或 to 参数' });
+    const settings = await getDaySettingsBatch(req.client, req.userId, from, to);
+    res.json({ settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/day-settings/:date', requireAuth, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { breakfastTime, lunchTime, dinnerTime } = req.body;
+    const timeRegex = /^\d{2}:\d{2}$/;
+    for (const t of [breakfastTime, lunchTime, dinnerTime]) {
+      if (t && !timeRegex.test(t)) return res.status(400).json({ error: '时间格式错误，应为 HH:mm' });
+    }
+    const result = await upsertDaySettings(req.client, req.userId, date, {
+      breakfast_time: breakfastTime ?? null,
+      lunch_time: lunchTime ?? null,
+      dinner_time: dinnerTime ?? null,
+    });
+    res.json({ settings: result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
