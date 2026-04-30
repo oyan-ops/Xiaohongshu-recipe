@@ -787,7 +787,7 @@ function PlanView({ cart, mode, session }) {
                   onClick={() => addAllToCart(selectedList.map(p => p.recipeId))}>全部加入菜单</button>
               )}
               <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                onClick={() => setShowShare(true)}>共享这几天</button>
+                onClick={() => setShowShare(true)}>共享计划</button>
               {allowEdit && (
                 <button className="btn coral" style={{ padding: '6px 14px', fontSize: 12 }}
                   onClick={() => setShowPicker(selectedDate)}>+ 加菜</button>
