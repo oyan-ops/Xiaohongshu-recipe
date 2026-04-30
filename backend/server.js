@@ -9,7 +9,7 @@ import {
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
-  listPlans, createPlan, deletePlan, updatePlanCooked,
+  listPlans, createPlan, deletePlan, updatePlanCooked, updatePlanTiming, readPlanTiming,
   createPlanInvite, readPlanInvite, acceptPlanInvite, listPlanMembers, removePlanMember, listSharedOwners,
 } from './lib/db.js';
 
@@ -426,6 +426,19 @@ app.patch('/api/plans/:id', requireAuth, async (req, res) => {
     const plan = await updatePlanCooked(req.client, req.params.id, cooked);
     if (!plan) return res.status(404).json({ error: '未找到' });
     res.json({ plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/plans/:id/timing', requireAuth, async (req, res) => {
+  try {
+    const { eatTime, prepTimeMins } = req.body;
+    if (eatTime && !/^\d{2}:\d{2}$/.test(eatTime)) {
+      return res.status(400).json({ error: '无效的时间格式，应为 HH:mm' });
+    }
+    const timing = await updatePlanTiming(req.client, req.params.id, eatTime, prepTimeMins || 0);
+    res.json({ timing });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

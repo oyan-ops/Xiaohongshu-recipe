@@ -280,7 +280,7 @@ export function adminClient() {
 export async function listPlans(client, fromDate, toDate) {
   let q = client
     .from('meal_plans')
-    .select('id, plan_date, cooked, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
+    .select('id, plan_date, cooked, recipe_id, eat_time, prep_time_mins, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
     .order('plan_date', { ascending: true });
   if (fromDate) q = q.gte('plan_date', fromDate);
   if (toDate) q = q.lte('plan_date', toDate);
@@ -291,6 +291,8 @@ export async function listPlans(client, fromDate, toDate) {
     date: p.plan_date,
     cooked: !!p.cooked,
     recipeId: p.recipe_id,
+    eatTime: p.eat_time,
+    prepTimeMins: p.prep_time_mins,
     recipe: p.recipes ? {
       id: p.recipes.id,
       title: p.recipes.title,
@@ -315,6 +317,33 @@ export async function updatePlanCooked(client, id, cooked) {
     .maybeSingle();
   if (error) throw new Error('更新失败：' + error.message);
   return data ? { id: data.id, cooked: !!data.cooked } : null;
+}
+
+export async function updatePlanTiming(client, planId, eatTime, prepTimeMins) {
+  const { data, error } = await client
+    .from('meal_plans')
+    .update({ eat_time: eatTime || null, prep_time_mins: prepTimeMins || 0 })
+    .eq('id', planId)
+    .select()
+    .single();
+  if (error) throw new Error('更新提醒失败：' + error.message);
+  return { id: data.id, eatTime: data.eat_time, prepTimeMins: data.prep_time_mins };
+}
+
+export async function readPlanTiming(client, planId) {
+  const { data, error } = await client
+    .from('meal_plans')
+    .select('id, eat_time, prep_time_mins, recipe_id, recipes(cook_time)')
+    .eq('id', planId)
+    .single();
+  if (error) throw new Error('读取提醒失败：' + error.message);
+  return {
+    id: data.id,
+    eatTime: data.eat_time,
+    prepTimeMins: data.prep_time_mins,
+    recipeId: data.recipe_id,
+    recipe: data.recipes ? { cookTime: data.recipes.cook_time } : null,
+  };
 }
 
 export async function createPlan(client, userId, recipeId, date) {

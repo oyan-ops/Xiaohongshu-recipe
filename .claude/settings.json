@@ -4,6 +4,9 @@
       "Bash(curl -s http://localhost:5173)",
       "Bash(pkill -f \"npm run dev\")",
       "Bash(node -c backend/server.js)"
+    ],
+    "additionalDirectories": [
+      "/Users/oliviayan/.claude/plans"
     ]
   }
 }
