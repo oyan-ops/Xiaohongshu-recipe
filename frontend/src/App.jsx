@@ -1245,10 +1245,13 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
     setTimeout(() => setPlanAdded(false), 1500);
   };
   const exportJSON = () => {
+    const defaultName = recipe.title || 'recipe';
+    const name = prompt('导出文件名', defaultName);
+    if (!name) return;
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
     const u = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = u; a.download = `${recipe.title || 'recipe'}.json`; a.click();
+    a.href = u; a.download = `${name}.json`; a.click();
     URL.revokeObjectURL(u);
   };
 
