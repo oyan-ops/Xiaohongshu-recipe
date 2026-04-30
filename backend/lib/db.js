@@ -13,6 +13,7 @@ export function clientForUser(accessToken) {
 
 const toRow = (recipe, userId) => ({
   user_id: userId,
+  folder_id: recipe.folderId || null,
   title: recipe.title || null,
   description: recipe.description || null,
   servings: recipe.servings || null,
@@ -30,6 +31,7 @@ const toRow = (recipe, userId) => ({
 
 const fromRow = (row) => ({
   id: row.id,
+  folderId: row.folder_id,
   title: row.title,
   description: row.description,
   servings: row.servings,
@@ -52,14 +54,17 @@ export async function insertRecipe(client, userId, recipe) {
   return fromRow(data);
 }
 
-export async function listRecipes(client) {
-  const { data, error } = await client
+export async function listRecipes(client, folderId) {
+  let q = client
     .from('recipes')
-    .select('id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
+    .select('id,folder_id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
     .order('extracted_at', { ascending: false });
+  if (folderId) q = q.eq('folder_id', folderId);
+  const { data, error } = await q;
   if (error) throw new Error('读取失败：' + error.message);
   return (data || []).map((r) => ({
     id: r.id,
+    folderId: r.folder_id,
     title: r.title,
     description: r.description,
     tags: r.tags || [],
@@ -70,6 +75,62 @@ export async function listRecipes(client) {
     servings: r.servings,
     extractedAt: r.extracted_at,
   }));
+}
+
+export async function listFolders(client) {
+  const { data, error } = await client
+    .from('folders')
+    .select('id,name,created_at')
+    .order('created_at', { ascending: true });
+  if (error) throw new Error('读取文件夹失败：' + error.message);
+  return (data || []).map((f) => ({ id: f.id, name: f.name, createdAt: f.created_at }));
+}
+
+export async function createFolder(client, userId, name) {
+  const { data, error } = await client
+    .from('folders')
+    .insert({ owner_id: userId, name })
+    .select()
+    .single();
+  if (error) throw new Error('创建文件夹失败：' + error.message);
+  return { id: data.id, name: data.name, createdAt: data.created_at };
+}
+
+export async function renameFolder(client, id, name) {
+  const { data, error } = await client
+    .from('folders')
+    .update({ name })
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error('改名失败：' + error.message);
+  return data ? { id: data.id, name: data.name, createdAt: data.created_at } : null;
+}
+
+export async function deleteFolder(client, id) {
+  const { error, count } = await client
+    .from('folders')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+  if (error) throw new Error('删除文件夹失败：' + error.message);
+  return count > 0;
+}
+
+export async function moveRecipe(client, recipeId, folderId) {
+  const { data, error } = await client
+    .from('recipes')
+    .update({ folder_id: folderId || null })
+    .eq('id', recipeId)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error('移动失败：' + error.message);
+  return data ? fromRow(data) : null;
+}
+
+export async function ensureDefaultFolder(client, userId) {
+  const folders = await listFolders(client);
+  if (folders.length > 0) return folders[0];
+  return createFolder(client, userId, '我的食谱');
 }
 
 export async function getRecipe(client, id) {

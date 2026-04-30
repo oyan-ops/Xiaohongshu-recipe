@@ -52,17 +52,35 @@ function Main({ session }) {
   const [tab, setTab] = useState('extract');
   const [recipes, setRecipes] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [folders, setFolders] = useState([]);
+  const [activeFolder, setActiveFolder] = useState(() => localStorage.getItem('activeFolder') || null);
 
-  const loadList = async () => {
+  const loadFolders = async () => {
+    const res = await authFetch('/api/folders');
+    const data = await res.json();
+    const list = data.folders || [];
+    setFolders(list);
+    if (list.length > 0 && (!activeFolder || !list.find(f => f.id === activeFolder))) {
+      setActiveFolder(list[0].id);
+    }
+  };
+
+  const loadList = async (folderId) => {
     setLoadingList(true);
     try {
-      const res = await authFetch('/api/recipes');
+      const target = folderId !== undefined ? folderId : activeFolder;
+      const path = target ? `/api/recipes?folder=${target}` : '/api/recipes';
+      const res = await authFetch(path);
       const data = await res.json();
       setRecipes(data.recipes || []);
     } finally { setLoadingList(false); }
   };
 
-  useEffect(() => { loadList(); }, []);
+  useEffect(() => { loadFolders(); }, []);
+  useEffect(() => {
+    if (activeFolder) localStorage.setItem('activeFolder', activeFolder);
+    loadList();
+  }, [activeFolder]);
 
   const onExtracted = () => { loadList(); setTimeout(() => setTab('library'), 600); };
   const signOut = () => supabase.auth.signOut();
@@ -91,10 +109,22 @@ function Main({ session }) {
                 <h2>提取一道食谱</h2>
                 <p>粘贴小红书帖子链接，或整段分享文字。</p>
               </div>
-              <Extract onExtracted={onExtracted} />
+              <Extract folders={folders} activeFolder={activeFolder} onExtracted={onExtracted} />
             </div>
           : <div className="slide-up">
-              <Library recipes={recipes} loading={loadingList} reload={loadList} />
+              <FolderBar
+                folders={folders}
+                active={activeFolder}
+                setActive={setActiveFolder}
+                reload={loadFolders}
+              />
+              <Library
+                recipes={recipes}
+                loading={loadingList}
+                reload={loadList}
+                folders={folders}
+                activeFolder={activeFolder}
+              />
             </div>
         }
       </main>
@@ -102,12 +132,69 @@ function Main({ session }) {
   );
 }
 
-function Extract({ onExtracted }) {
+function FolderBar({ folders, active, setActive, reload }) {
+  const create = async () => {
+    const name = prompt('文件夹名称');
+    if (!name?.trim()) return;
+    const res = await authFetch('/api/folders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    const data = await res.json();
+    if (data.folder) { await reload(); setActive(data.folder.id); }
+  };
+
+  const rename = async (f, e) => {
+    e.stopPropagation();
+    const name = prompt('改名为', f.name);
+    if (!name?.trim() || name.trim() === f.name) return;
+    await authFetch(`/api/folders/${f.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    reload();
+  };
+
+  const remove = async (f, e) => {
+    e.stopPropagation();
+    if (folders.length <= 1) return alert('至少保留一个文件夹');
+    if (!confirm(`删除文件夹「${f.name}」？里面的食谱会变成「无文件夹」。`)) return;
+    await authFetch(`/api/folders/${f.id}`, { method: 'DELETE' });
+    if (active === f.id) setActive(folders.find(x => x.id !== f.id)?.id || null);
+    reload();
+  };
+
+  return (
+    <div className="folder-bar">
+      {folders.map(f => (
+        <div
+          key={f.id}
+          className={`folder-pill ${active === f.id ? 'active' : ''}`}
+          onClick={() => setActive(f.id)}
+        >
+          <span>{f.name}</span>
+          {active === f.id && (
+            <span className="folder-actions">
+              <button onClick={(e) => rename(f, e)} title="改名">✎</button>
+              <button onClick={(e) => remove(f, e)} title="删除">✕</button>
+            </span>
+          )}
+        </div>
+      ))}
+      <button className="folder-pill add" onClick={create}>+ 新建</button>
+    </div>
+  );
+}
+
+function Extract({ folders, activeFolder, onExtracted }) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(null);
   const [clipHint, setClipHint] = useState('');
+  const [destFolder, setDestFolder] = useState(activeFolder);
+
+  useEffect(() => { if (activeFolder) setDestFolder(activeFolder); }, [activeFolder]);
 
   const submit = async (raw) => {
     const target = extractXhsUrl(raw) || (raw || '').trim();
@@ -116,7 +203,7 @@ function Extract({ onExtracted }) {
     try {
       const res = await authFetch('/api/recipe/from-link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: target }),
+        body: JSON.stringify({ url: target, folderId: destFolder }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '抓取失败');
@@ -182,6 +269,15 @@ function Extract({ onExtracted }) {
           placeholder="粘贴小红书链接或整段分享文字"
         />
       </div>
+
+      {folders.length > 0 && (
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label>保存到</label>
+          <select className="input" value={destFolder || ''} onChange={e => setDestFolder(e.target.value)}>
+            {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button className="btn coral" onClick={() => submit(url)} disabled={!url.trim() || loading}>
           {loading ? '抓取中…' : '抓取并提取'}
@@ -197,9 +293,18 @@ function Extract({ onExtracted }) {
   );
 }
 
-function Library({ recipes, loading, reload }) {
+function Library({ recipes, loading, reload, folders, activeFolder }) {
   const [selected, setSelected] = useState(null);
   const [q, setQ] = useState('');
+
+  const moveTo = async (recipeId, folderId) => {
+    await authFetch(`/api/recipes/${recipeId}/folder`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId }),
+    });
+    setSelected(null);
+    reload();
+  };
 
   const filtered = recipes.filter(r => {
     const term = q.toLowerCase();
@@ -261,12 +366,21 @@ function Library({ recipes, loading, reload }) {
         </div>
       )}
 
-      {selected && <RecipeDetail recipe={selected} onClose={() => setSelected(null)} onDelete={() => remove(selected.id)} />}
+      {selected && (
+        <RecipeDetail
+          recipe={selected}
+          folders={folders}
+          onClose={() => setSelected(null)}
+          onDelete={() => remove(selected.id)}
+          onMove={(folderId) => moveTo(selected.id, folderId)}
+        />
+      )}
     </div>
   );
 }
 
-function RecipeDetail({ recipe, onClose, onDelete }) {
+function RecipeDetail({ recipe, folders, onClose, onDelete, onMove }) {
+  const otherFolders = (folders || []).filter(f => f.id !== recipe.folderId);
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
     const u = URL.createObjectURL(blob);
@@ -350,6 +464,17 @@ function RecipeDetail({ recipe, onClose, onDelete }) {
             {recipe.sourceUrl && <a className="btn ghost" href={recipe.sourceUrl} target="_blank" rel="noreferrer">原帖</a>}
             {recipe.videoUrl && <a className="btn ghost" href={recipe.videoUrl} target="_blank" rel="noreferrer">原视频</a>}
             <button className="btn ghost" onClick={exportJSON}>导出 JSON</button>
+            {otherFolders.length > 0 && onMove && (
+              <select
+                className="input"
+                style={{ width: 'auto', padding: '12px 14px' }}
+                value=""
+                onChange={(e) => e.target.value && onMove(e.target.value)}
+              >
+                <option value="">移到...</option>
+                {otherFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            )}
             <button className="btn danger" onClick={onDelete}>删除</button>
           </div>
         </div>

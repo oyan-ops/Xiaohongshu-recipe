@@ -156,6 +156,50 @@ main { padding: 32px 0 64px; }
 .banner.success { background: #F1F3EE; border-color: #DDE3D5; color: #4A5640; }
 
 /* Library */
+.folder-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.folder-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.folder-pill:hover { border-color: var(--ink-soft); color: var(--ink); }
+.folder-pill.active {
+  background: var(--ink);
+  color: var(--cream);
+  border-color: var(--ink);
+}
+.folder-pill.add {
+  background: transparent;
+  color: var(--ink-mute);
+  border-style: dashed;
+}
+.folder-pill.add:hover { color: var(--ink-soft); border-color: var(--ink-soft); }
+.folder-actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 4px;
+}
+.folder-actions button {
+  color: rgba(255,255,255,0.6);
+  font-size: 12px;
+  padding: 0 4px;
+}
+.folder-actions button:hover { color: #fff; }
+
 .search {
   position: relative;
   margin-bottom: 24px;

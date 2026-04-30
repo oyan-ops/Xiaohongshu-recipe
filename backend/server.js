@@ -6,6 +6,7 @@ import { fetchXhsPost } from './lib/xhs.js';
 import {
   clientForUser,
   insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource,
+  listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
 } from './lib/db.js';
 
 const app = express();
@@ -83,9 +84,15 @@ async function requireAuth(req, res, next) {
 
 app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
   const url = (req.body?.url || '').trim();
+  let folderId = req.body?.folderId || null;
   if (!url) return res.status(400).json({ error: '缺少链接' });
 
   try {
+    if (!folderId) {
+      const f = await ensureDefaultFolder(req.client, req.userId);
+      folderId = f.id;
+    }
+
     const post = await fetchXhsPost(url);
 
     const existing = await findRecipesBySource(req.client, post.sourceUrl, post.noteId);
@@ -123,6 +130,7 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
       const dishImage = imageUrls[idx] || post.coverImage || null;
       const row = await insertRecipe(req.client, req.userId, {
         ...r,
+        folderId,
         sourceUrl: post.sourceUrl,
         videoUrl: post.videoUrl,
         coverImage: dishImage,
@@ -140,7 +148,62 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
 
 app.get('/api/recipes', requireAuth, async (req, res) => {
   try {
-    res.json({ recipes: await listRecipes(req.client) });
+    res.json({ recipes: await listRecipes(req.client, req.query.folder || null) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/folders', requireAuth, async (req, res) => {
+  try {
+    let folders = await listFolders(req.client);
+    if (folders.length === 0) {
+      const def = await ensureDefaultFolder(req.client, req.userId);
+      folders = [def];
+    }
+    res.json({ folders });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/folders', requireAuth, async (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: '缺少文件夹名称' });
+  try {
+    res.json({ folder: await createFolder(req.client, req.userId, name) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/folders/:id', requireAuth, async (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: '缺少新名称' });
+  try {
+    const folder = await renameFolder(req.client, req.params.id, name);
+    if (!folder) return res.status(404).json({ error: '未找到' });
+    res.json({ folder });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/folders/:id', requireAuth, async (req, res) => {
+  try {
+    const ok = await deleteFolder(req.client, req.params.id);
+    if (!ok) return res.status(404).json({ error: '未找到' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/recipes/:id/folder', requireAuth, async (req, res) => {
+  try {
+    const updated = await moveRecipe(req.client, req.params.id, req.body?.folderId || null);
+    if (!updated) return res.status(404).json({ error: '未找到' });
+    res.json({ recipe: updated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
