@@ -198,6 +198,7 @@ function Main({ session }) {
   const [folders, setFolders] = useState([]);
   const [activeFolder, setActiveFolder] = useState(() => localStorage.getItem('activeFolder') || null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [clipInvite, setClipInvite] = useState(null);
   const cart = useCart();
 
   const loadFolders = async () => {
@@ -230,6 +231,21 @@ function Main({ session }) {
     if (Notification && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+  }, []);
+
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+      const planMatch = text.match(/\/plan-invite\/([^/?#\s]+)/);
+      const recipeMatch = text.match(/\/invite\/([^/?#\s]+)/);
+      if (planMatch) {
+        setClipInvite({ token: planMatch[1], type: 'plan' });
+      } else if (recipeMatch) {
+        setClipInvite({ token: recipeMatch[1], type: 'recipe' });
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
   }, []);
 
   const onExtracted = () => { loadList(); setTimeout(() => setTab('library'), 600); };
@@ -301,6 +317,13 @@ function Main({ session }) {
         </button>
       )}
       {cartOpen && <CartDrawer cart={cart} onClose={() => setCartOpen(false)} />}
+      {clipInvite && (
+        <InviteClipboardModal
+          token={clipInvite.token}
+          type={clipInvite.type}
+          onClose={() => setClipInvite(null)}
+        />
+      )}
     </div>
   );
 }
@@ -415,6 +438,68 @@ function TimingEditorModal({ plan, recipe, onSave, onClose }) {
             <button className="btn coral" style={{ flex: 1 }} onClick={handleSave}>保存</button>
             <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>取消</button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InviteClipboardModal({ token, type, onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [info, setInfo] = useState(null);
+
+  useEffect(() => {
+    const endpoint = type === 'plan' ? `/api/plan-invites/${token}` : `/api/invites/${token}`;
+    authFetch(endpoint)
+      .then(r => r.json())
+      .then(d => setInfo(d.invite || d))
+      .catch(() => {});
+  }, [token]);
+
+  const accept = async () => {
+    setLoading(true);
+    try {
+      const endpoint = type === 'plan'
+        ? `/api/plan-invites/${token}/accept`
+        : `/api/invites/${token}/accept`;
+      await authFetch(endpoint, { method: 'POST' });
+      setDone(true);
+      setTimeout(() => window.location.replace('/'), 1200);
+    } catch (e) {
+      alert('加入失败：' + e.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e => e.stopPropagation()}>
+        <div className="sheet-head">
+          <button className="sheet-close" onClick={onClose}>✕</button>
+          <h2>收到邀请</h2>
+          <p className="desc">{type === 'plan' ? '做菜计划邀请' : '食谱库邀请'}</p>
+        </div>
+        <div className="sheet-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {info && (
+            <div style={{ padding: 12, backgroundColor: 'var(--bg-raised)', borderRadius: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 4 }}>来自</div>
+              <div style={{ fontWeight: 600 }}>{info.ownerName || info.ownerEmail || '未知用户'}</div>
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 4 }}>
+                权限：{info.role === 'editor' ? '可编辑' : '只读'}
+              </div>
+            </div>
+          )}
+          {done ? (
+            <div style={{ textAlign: 'center', color: 'var(--green)', padding: 16, fontSize: 16 }}>✓ 已加入！</div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn coral" style={{ flex: 1 }} onClick={accept} disabled={loading}>
+                {loading ? '加入中…' : '接受邀请'}
+              </button>
+              <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>忽略</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
