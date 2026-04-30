@@ -480,10 +480,10 @@ function HeatMap({ plans }) {
       const mins = workloadByDate[iso] || 0;
       const future = cell > today;
       let level = 0;
-      if (mins > 0 && mins < 30) level = 1;
-      else if (mins < 60) level = 2;
-      else if (mins < 120) level = 3;
-      else if (mins >= 120) level = 4;
+      if (mins >= 120) level = 4;
+      else if (mins >= 60) level = 3;
+      else if (mins >= 30) level = 2;
+      else if (mins > 0) level = 1;
       col.push({ iso, mins, level, future });
     }
     cells.push(col);
