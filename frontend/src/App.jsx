@@ -1609,11 +1609,20 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
                 autoFocus
                 style={{ flex: 1 }}
               />
-              <button className="btn coral" onClick={updateTitle} disabled={saveTitle}>{saveTitle ? '保存中...' : '保存'}</button>
-              <button className="btn ghost" onClick={() => { setEditTitle(recipe.title || ''); setEditingTitle(false); }}>取消</button>
+              <button className="btn coral" onClick={updateTitle} disabled={saveTitle} style={{ padding: '8px 12px', fontSize: 12 }}>{saveTitle ? '保存中...' : '保存'}</button>
+              <button className="btn ghost" onClick={() => { setEditTitle(recipe.title || ''); setEditingTitle(false); }} style={{ padding: '8px 12px', fontSize: 12 }}>取消</button>
             </div>
           ) : (
-            <h2 style={{ cursor: 'pointer' }} onClick={() => setEditingTitle(true)}>{recipe.title || '未命名'}</h2>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12 }}>
+              <h2 style={{ flex: 1, margin: 0 }}>{recipe.title || '未命名'}</h2>
+              <button
+                className="btn ghost"
+                onClick={() => setEditingTitle(true)}
+                style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                编辑
+              </button>
+            </div>
           )}
           {recipe.description && <p className="desc">{recipe.description}</p>}
           {recipe.author && <p className="author">— {recipe.author}</p>}
