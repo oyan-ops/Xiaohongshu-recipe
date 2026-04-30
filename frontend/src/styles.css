@@ -188,6 +188,19 @@ main { padding: 32px 0 64px; }
   border-style: dashed;
 }
 .folder-pill.add:hover { color: var(--ink-soft); border-color: var(--ink-soft); }
+.folder-pill .badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  letter-spacing: 0.02em;
+}
+.folder-pill.active .badge {
+  background: rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.9);
+}
 .folder-actions {
   display: inline-flex;
   gap: 6px;

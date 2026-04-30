@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authFetch } from './api';
+import { authFetch, apiUrl } from './api';
 import { supabase } from './supabase';
 
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
@@ -44,8 +44,66 @@ export default function App() {
   }, []);
 
   if (authLoading) return <div className="app"><p className="empty">加载中…</p></div>;
+
+  const inviteMatch = window.location.pathname.match(/^\/invite\/([^/?#]+)/);
+  if (inviteMatch) return <InvitePage token={inviteMatch[1]} session={session} />;
+
   if (!session) return <Login />;
   return <Main session={session} />;
+}
+
+function InvitePage({ token, session }) {
+  const [invite, setInvite] = useState(null);
+  const [error, setError] = useState(null);
+  const [accepting, setAccepting] = useState(false);
+
+  useEffect(() => {
+    fetch(apiUrl(`/api/invites/${token}`))
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => ok ? setInvite(d.invite) : setError(d.error || '邀请无效'));
+  }, [token]);
+
+  const accept = async () => {
+    if (!session) {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href },
+      });
+      return;
+    }
+    setAccepting(true);
+    try {
+      const res = await authFetch(`/api/invites/${token}/accept`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '加入失败');
+      localStorage.setItem('activeFolder', data.folderId);
+      window.location.replace('/');
+    } catch (e) { setError(e.message); setAccepting(false); }
+  };
+
+  return (
+    <div className="app">
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 20, padding: 32, textAlign: 'center'
+      }}>
+        <h1 className="serif" style={{ fontSize: 28, fontWeight: 600 }}>食谱共享邀请</h1>
+        {error && <p className="banner error" style={{ display: 'inline-block' }}>{error}</p>}
+        {!error && !invite && <p className="empty">加载中…</p>}
+        {invite && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', maxWidth: 380, lineHeight: 1.6 }}>
+              有人邀请你加入文件夹 <strong>「{invite.folderName || '(未命名)'}」</strong>
+              ,权限为 <strong>{invite.role === 'editor' ? '可编辑' : '只读'}</strong>。
+            </p>
+            <button className="btn coral" onClick={accept} disabled={accepting} style={{ padding: '14px 24px' }}>
+              {accepting ? '加入中…' : session ? '加入文件夹' : '使用 Google 登录并加入'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Main({ session }) {
@@ -133,6 +191,8 @@ function Main({ session }) {
 }
 
 function FolderBar({ folders, active, setActive, reload }) {
+  const [shareFor, setShareFor] = useState(null);
+
   const create = async () => {
     const name = prompt('文件夹名称');
     if (!name?.trim()) return;
@@ -165,23 +225,97 @@ function FolderBar({ folders, active, setActive, reload }) {
   };
 
   return (
-    <div className="folder-bar">
-      {folders.map(f => (
-        <div
-          key={f.id}
-          className={`folder-pill ${active === f.id ? 'active' : ''}`}
-          onClick={() => setActive(f.id)}
-        >
-          <span>{f.name}</span>
-          {active === f.id && (
-            <span className="folder-actions">
-              <button onClick={(e) => rename(f, e)} title="改名">✎</button>
-              <button onClick={(e) => remove(f, e)} title="删除">✕</button>
-            </span>
-          )}
+    <>
+      <div className="folder-bar">
+        {folders.map(f => (
+          <div
+            key={f.id}
+            className={`folder-pill ${active === f.id ? 'active' : ''}`}
+            onClick={() => setActive(f.id)}
+          >
+            <span>{f.name}</span>
+            {f.memberCount > 0 && <span className="badge">共享 {f.memberCount}</span>}
+            {!f.isOwner && <span className="badge">受邀</span>}
+            {active === f.id && f.isOwner && (
+              <span className="folder-actions">
+                <button onClick={(e) => { e.stopPropagation(); setShareFor(f); }} title="分享">⇪</button>
+                <button onClick={(e) => rename(f, e)} title="改名">✎</button>
+                <button onClick={(e) => remove(f, e)} title="删除">✕</button>
+              </span>
+            )}
+          </div>
+        ))}
+        <button className="folder-pill add" onClick={create}>+ 新建</button>
+      </div>
+      {shareFor && <ShareModal folder={shareFor} onClose={() => setShareFor(null)} />}
+    </>
+  );
+}
+
+function ShareModal({ folder, onClose }) {
+  const [role, setRole] = useState('editor');
+  const [ttl, setTtl] = useState(7);
+  const [link, setLink] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch(`/api/folders/${folder.id}/invite`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, ttlDays: ttl }),
+      });
+      const data = await res.json();
+      if (data.invite) setLink(`${window.location.origin}/invite/${data.invite.token}`);
+    } finally { setLoading(false); }
+  };
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  };
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <div className="sheet-head">
+          <button className="sheet-close" onClick={onClose}>✕</button>
+          <h2>分享「{folder.name}」</h2>
+          <p className="desc">生成一个邀请链接,谁拿到链接谁就能加入这个文件夹。</p>
         </div>
-      ))}
-      <button className="folder-pill add" onClick={create}>+ 新建</button>
+        <div className="sheet-body">
+          <div className="field">
+            <label>权限</label>
+            <select className="input" value={role} onChange={e => setRole(e.target.value)}>
+              <option value="editor">可编辑(增删食谱)</option>
+              <option value="viewer">只读</option>
+            </select>
+          </div>
+          <div className="field">
+            <label>有效期</label>
+            <select className="input" value={ttl} onChange={e => setTtl(+e.target.value)}>
+              <option value={1}>1 天</option>
+              <option value={7}>7 天</option>
+              <option value={30}>30 天</option>
+              <option value={0}>永久</option>
+            </select>
+          </div>
+          {!link
+            ? <button className="btn coral" onClick={generate} disabled={loading}>
+                {loading ? '生成中…' : '生成邀请链接'}
+              </button>
+            : <>
+                <div className="field">
+                  <label>邀请链接</label>
+                  <input className="input" readOnly value={link} onFocus={e => e.target.select()} />
+                </div>
+                <button className="btn coral" onClick={copy}>
+                  {copied ? '已复制 ✓' : '复制链接'}
+                </button>
+              </>
+          }
+        </div>
+      </div>
     </div>
   );
 }

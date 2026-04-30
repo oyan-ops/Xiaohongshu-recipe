@@ -77,13 +77,31 @@ export async function listRecipes(client, folderId) {
   }));
 }
 
-export async function listFolders(client) {
+export async function listFolders(client, userId) {
   const { data, error } = await client
     .from('folders')
-    .select('id,name,created_at')
+    .select('id,name,owner_id,created_at')
     .order('created_at', { ascending: true });
   if (error) throw new Error('读取文件夹失败：' + error.message);
-  return (data || []).map((f) => ({ id: f.id, name: f.name, createdAt: f.created_at }));
+  const folders = data || [];
+  const ids = folders.map((f) => f.id);
+  let memberCounts = {};
+  if (ids.length > 0) {
+    const { data: members } = await client
+      .from('folder_members')
+      .select('folder_id')
+      .in('folder_id', ids);
+    for (const m of members || []) {
+      memberCounts[m.folder_id] = (memberCounts[m.folder_id] || 0) + 1;
+    }
+  }
+  return folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    createdAt: f.created_at,
+    isOwner: f.owner_id === userId,
+    memberCount: memberCounts[f.id] || 0,
+  }));
 }
 
 export async function createFolder(client, userId, name) {
@@ -128,9 +146,60 @@ export async function moveRecipe(client, recipeId, folderId) {
 }
 
 export async function ensureDefaultFolder(client, userId) {
-  const folders = await listFolders(client);
-  if (folders.length > 0) return folders[0];
+  const folders = await listFolders(client, userId);
+  const owned = folders.find((f) => f.isOwner);
+  if (owned) return owned;
   return createFolder(client, userId, '我的食谱');
+}
+
+export async function createInvite(client, userId, folderId, role, ttlDays) {
+  const token = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) +
+    Math.random().toString(36).slice(2);
+  const expires_at = ttlDays > 0
+    ? new Date(Date.now() + ttlDays * 86400000).toISOString()
+    : null;
+  const { data, error } = await client
+    .from('folder_invites')
+    .insert({ token, folder_id: folderId, role, created_by: userId, expires_at })
+    .select()
+    .single();
+  if (error) throw new Error('创建邀请失败：' + error.message);
+  return { token: data.token, role: data.role, expiresAt: data.expires_at };
+}
+
+// Look up invite without RLS — needs service-role client (caller passes adminClient).
+export async function readInvite(adminClient, token) {
+  const { data, error } = await adminClient
+    .from('folder_invites')
+    .select('token, folder_id, role, expires_at, created_by, folders(name, owner_id)')
+    .eq('token', token)
+    .maybeSingle();
+  if (error) throw new Error('读取邀请失败：' + error.message);
+  if (!data) return null;
+  if (data.expires_at && new Date(data.expires_at) < new Date()) return { expired: true };
+  return {
+    token: data.token,
+    folderId: data.folder_id,
+    folderName: data.folders?.name || null,
+    ownerId: data.folders?.owner_id || null,
+    role: data.role,
+    expiresAt: data.expires_at,
+  };
+}
+
+export async function acceptInvite(adminClient, userId, token) {
+  const invite = await readInvite(adminClient, token);
+  if (!invite || invite.expired) throw new Error('邀请链接已失效');
+  if (invite.ownerId === userId) return { folderId: invite.folderId, alreadyOwner: true };
+  const { error } = await adminClient
+    .from('folder_members')
+    .upsert({ folder_id: invite.folderId, user_id: userId, role: invite.role }, { onConflict: 'folder_id,user_id' });
+  if (error) throw new Error('加入失败：' + error.message);
+  return { folderId: invite.folderId, folderName: invite.folderName };
+}
+
+export function adminClient() {
+  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 }
 
 export async function getRecipe(client, id) {

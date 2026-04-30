@@ -4,9 +4,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
 import {
-  clientForUser,
+  clientForUser, adminClient,
   insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource,
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
+  createInvite, readInvite, acceptInvite,
 } from './lib/db.js';
 
 const app = express();
@@ -156,7 +157,7 @@ app.get('/api/recipes', requireAuth, async (req, res) => {
 
 app.get('/api/folders', requireAuth, async (req, res) => {
   try {
-    let folders = await listFolders(req.client);
+    let folders = await listFolders(req.client, req.userId);
     if (folders.length === 0) {
       const def = await ensureDefaultFolder(req.client, req.userId);
       folders = [def];
@@ -164,6 +165,38 @@ app.get('/api/folders', requireAuth, async (req, res) => {
     res.json({ folders });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/folders/:id/invite', requireAuth, async (req, res) => {
+  try {
+    const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
+    const ttlDays = Number.isFinite(+req.body?.ttlDays) ? +req.body.ttlDays : 7;
+    const invite = await createInvite(req.client, req.userId, req.params.id, role, ttlDays);
+    res.json({ invite });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public invite preview (so unlogged users can see what they're accepting).
+app.get('/api/invites/:token', async (req, res) => {
+  try {
+    const invite = await readInvite(adminClient(), req.params.token);
+    if (!invite) return res.status(404).json({ error: '邀请不存在' });
+    if (invite.expired) return res.status(410).json({ error: '邀请已过期' });
+    res.json({ invite });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/invites/:token/accept', requireAuth, async (req, res) => {
+  try {
+    const result = await acceptInvite(adminClient(), req.userId, req.params.token);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
