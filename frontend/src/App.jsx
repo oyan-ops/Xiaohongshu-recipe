@@ -455,10 +455,19 @@ function HeatMap({ plans }) {
   const lastMon = new Date(today); lastMon.setDate(today.getDate() - offsetSinceMonday);
   const startMon = new Date(lastMon); startMon.setDate(lastMon.getDate() - 7 * 11);
 
-  const minutesByDate = {};
+  const workloadByDate = {};
   for (const p of plans) {
     if (!p.cooked) continue;
-    minutesByDate[p.date] = (minutesByDate[p.date] || 0) + parseMinutes(p.recipe?.cookTime);
+    const r = p.recipe || {};
+    // 优先用 AI 评估的 effortMinutes × (1 + difficulty * 0.3),其次回退到解析 cookTime。
+    let w;
+    if (Number.isInteger(r.effortMinutes)) {
+      const diffMult = Number.isInteger(r.difficulty) ? (1 + r.difficulty * 0.3) : 1;
+      w = r.effortMinutes * diffMult;
+    } else {
+      w = parseMinutes(r.cookTime);
+    }
+    workloadByDate[p.date] = (workloadByDate[p.date] || 0) + w;
   }
 
   const cells = [];
@@ -468,7 +477,7 @@ function HeatMap({ plans }) {
       const cell = new Date(startMon);
       cell.setDate(cell.getDate() + w * 7 + d);
       const iso = isoFor(cell);
-      const mins = minutesByDate[iso] || 0;
+      const mins = workloadByDate[iso] || 0;
       const future = cell > today;
       let level = 0;
       if (mins > 0 && mins < 30) level = 1;
@@ -508,11 +517,6 @@ function HeatMap({ plans }) {
           })}
         </div>
       ))}
-      <div className="heatmap-legend">
-        少 <span className="heatmap-cell level-0" /> <span className="heatmap-cell level-1" />
-        <span className="heatmap-cell level-2" /> <span className="heatmap-cell level-3" />
-        <span className="heatmap-cell level-4" /> 多
-      </div>
     </div>
   );
 }
@@ -564,6 +568,7 @@ function PlanView({ cart, mode }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null);
+  const [evaluating, setEvaluating] = useState(false);
   const today = todayISO();
   const initialDate = today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -600,6 +605,19 @@ function PlanView({ cart, mode }) {
     for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
   };
 
+  const evaluateAll = async () => {
+    setEvaluating(true);
+    try {
+      const res = await authFetch('/api/recipes/evaluate-all', { method: 'POST' });
+      if (!res.ok) throw new Error('评估失败');
+      await load();
+    } catch (e) {
+      alert('评估出错: ' + e.message);
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
   // History mode shows only cooked entries; plan mode shows everything.
   const visiblePlans = mode === 'history' ? plans.filter(p => p.cooked) : plans;
   const byDate = new Map();
@@ -633,10 +651,19 @@ function PlanView({ cart, mode }) {
   return (
     <div>
       <div className="section-head">
-        {mode === 'history'
-          ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
-          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
-        }
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            {mode === 'history'
+              ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
+              : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
+            }
+          </div>
+          {mode === 'history' && (
+            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }} onClick={evaluateAll} disabled={evaluating}>
+              {evaluating ? '评估中…' : '评估所有菜'}
+            </button>
+          )}
+        </div>
       </div>
 
       {mode === 'history' && <HeatMap plans={plans} />}

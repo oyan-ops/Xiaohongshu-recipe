@@ -506,25 +506,19 @@ main { padding: 32px 0 64px; }
 .heatmap-cell {
   aspect-ratio: 1 / 1;
   border-radius: 3px;
-  background: var(--line-soft);
+  background: transparent;
+  border: 1px solid var(--line);
   display: inline-block;
   width: 12px;
   height: 12px;
+  box-sizing: border-box;
 }
-.heatmap-cell.level-0 { background: var(--line-soft); }
-.heatmap-cell.level-1 { background: #F5DCD2; }
-.heatmap-cell.level-2 { background: #EAB39E; }
-.heatmap-cell.level-3 { background: #D67B5C; }
-.heatmap-cell.level-4 { background: var(--coral); }
-.heatmap-cell.future { opacity: 0.3; }
-.heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--ink-mute);
-}
+.heatmap-cell.level-0 { background: transparent; border-color: var(--line); }
+.heatmap-cell.level-1 { background: #F8E2D7; border-color: #F8E2D7; }
+.heatmap-cell.level-2 { background: #EFB196; border-color: #EFB196; }
+.heatmap-cell.level-3 { background: #D67B5C; border-color: #D67B5C; }
+.heatmap-cell.level-4 { background: var(--coral); border-color: var(--coral); }
+.heatmap-cell.future { opacity: 0.25; }
 .plan-cooked-toggle {
   font-size: 20px;
   color: var(--ink-soft);

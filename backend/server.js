@@ -34,6 +34,8 @@ const RECIPE_PROMPT = `你是一位专业的中文菜谱整理师。请仔细分
       "prepTime": "准备时间",
       "cookTime": "烹饪时间",
       "imageIndex": 0,
+      "difficulty": 3,
+      "effortMinutes": 30,
       "ingredients": [{"name": "食材名", "amount": "用量", "notes": "备注（可选）"}],
       "steps": [{"step": 1, "description": "步骤描述", "tips": "小贴士（可选）"}],
       "tags": ["标签1", "标签2"],
@@ -43,6 +45,10 @@ const RECIPE_PROMPT = `你是一位专业的中文菜谱整理师。请仔细分
 }
 
 **imageIndex 说明**：图片按顺序输入（从 0 开始），请为每道菜选一张最能代表它的图片，填入它的 index。如果不确定，用 0。
+
+**difficulty（1-5 整数）**：实际操作难度。1=零基础(冲泡/凉拌)，2=简单家常，3=中等(需要掌握火候/手法)，4=有挑战(发酵/精确控温)，5=很难(高级技法)。考虑刀工、火候、调味的精细度，**忽略时间长短**(发酵慢但不难)。
+
+**effortMinutes（整数,分钟）**：实际需要人手操作的总分钟数(不算等待/发酵/烤箱里的时间)。比如"和面静置 1 小时"实际人手只需 5 分钟,effortMinutes=5。这是估"占人时间"的指标,跟 cookTime 不一样。
 
 如果只有一道菜，数组里就只放一条。所有内容使用中文。`;
 
@@ -340,6 +346,83 @@ app.delete('/api/plans/:id', requireAuth, async (req, res) => {
     const ok = await deletePlan(req.client, req.params.id);
     if (!ok) return res.status(404).json({ error: '未找到' });
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const EVAL_PROMPT = `下面是一道菜的食材和步骤,请严格输出 JSON(不要 markdown):
+{"difficulty": 1-5 整数, "effortMinutes": 整数}
+
+difficulty 评分标准：1=零基础(冲泡/凉拌), 2=简单家常, 3=中等(掌握火候/手法), 4=有挑战(发酵/精确控温), 5=很难(高级技法)。考虑刀工/火候/调味,**忽略时间长短**(发酵慢但不难)。
+
+effortMinutes：实际人手操作的总分钟数(不算等待/发酵/烤箱里的时间)。`;
+
+async function evaluateRecipe(recipe) {
+  const text = `菜名:${recipe.title || '?'}
+食材:
+${(recipe.ingredients || []).map(i => `- ${i.name} ${i.amount || ''} ${i.notes || ''}`).join('\n')}
+步骤:
+${(recipe.steps || []).map((s, i) => `${i + 1}. ${s.description}${s.tips ? ' [小贴士:' + s.tips + ']' : ''}`).join('\n')}
+原烹饪时间:${recipe.cookTime || '未知'}, 准备:${recipe.prepTime || '未知'}`;
+  const message = await anthropic.messages.create({
+    model: 'claude-opus-4-7',
+    max_tokens: 256,
+    messages: [{ role: 'user', content: EVAL_PROMPT + '\n\n' + text }],
+  });
+  const json = parseRecipeJson(message.content[0].text);
+  if (!json) return null;
+  return {
+    difficulty: Number.isInteger(json.difficulty) ? Math.max(1, Math.min(5, json.difficulty)) : null,
+    effortMinutes: Number.isInteger(json.effortMinutes) ? Math.max(0, json.effortMinutes) : null,
+  };
+}
+
+app.post('/api/recipes/:id/evaluate', requireAuth, async (req, res) => {
+  try {
+    const recipe = await getRecipe(req.client, req.params.id);
+    if (!recipe) return res.status(404).json({ error: '未找到' });
+    const score = await evaluateRecipe(recipe);
+    if (!score) return res.status(500).json({ error: '评估失败' });
+    const { error } = await req.client
+      .from('recipes')
+      .update({ difficulty: score.difficulty, effort_minutes: score.effortMinutes })
+      .eq('id', recipe.id);
+    if (error) throw new Error(error.message);
+    res.json({ score });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 一键评估当前用户所有未评分的菜谱(后台串行,避免速率限制)
+app.post('/api/recipes/evaluate-all', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await req.client
+      .from('recipes')
+      .select('*')
+      .is('difficulty', null);
+    if (error) throw new Error(error.message);
+    const list = data || [];
+    let done = 0, failed = 0;
+    for (const row of list) {
+      try {
+        const score = await evaluateRecipe({
+          title: row.title,
+          ingredients: row.ingredients,
+          steps: row.steps,
+          cookTime: row.cook_time,
+          prepTime: row.prep_time,
+        });
+        if (!score) { failed++; continue; }
+        await req.client
+          .from('recipes')
+          .update({ difficulty: score.difficulty, effort_minutes: score.effortMinutes })
+          .eq('id', row.id);
+        done++;
+      } catch (_) { failed++; }
+    }
+    res.json({ total: list.length, done, failed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

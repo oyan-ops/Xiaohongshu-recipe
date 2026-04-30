@@ -27,6 +27,8 @@ const toRow = (recipe, userId) => ({
   video_url: recipe.videoUrl || null,
   cover_image: recipe.coverImage || null,
   author: recipe.author || null,
+  difficulty: Number.isInteger(recipe.difficulty) ? recipe.difficulty : null,
+  effort_minutes: Number.isInteger(recipe.effortMinutes) ? recipe.effortMinutes : null,
 });
 
 const fromRow = (row) => ({
@@ -46,6 +48,8 @@ const fromRow = (row) => ({
   videoUrl: row.video_url,
   coverImage: row.cover_image,
   author: row.author,
+  difficulty: row.difficulty,
+  effortMinutes: row.effort_minutes,
   extractedAt: row.extracted_at,
 });
 
@@ -265,7 +269,7 @@ export function adminClient() {
 export async function listPlans(client, fromDate, toDate) {
   let q = client
     .from('meal_plans')
-    .select('id, plan_date, cooked, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients)')
+    .select('id, plan_date, cooked, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
     .order('plan_date', { ascending: true });
   if (fromDate) q = q.gte('plan_date', fromDate);
   if (toDate) q = q.lte('plan_date', toDate);
@@ -285,6 +289,8 @@ export async function listPlans(client, fromDate, toDate) {
       cookTime: p.recipes.cook_time,
       servings: p.recipes.servings,
       ingredients: p.recipes.ingredients || [],
+      difficulty: p.recipes.difficulty,
+      effortMinutes: p.recipes.effort_minutes,
     } : null,
   }));
 }
