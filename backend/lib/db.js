@@ -206,6 +206,17 @@ export async function moveRecipe(client, recipeId, folderId) {
   return data ? fromRow(data) : null;
 }
 
+export async function updateRecipeTitle(client, recipeId, title) {
+  const { data, error } = await client
+    .from('recipes')
+    .update({ title: title || null })
+    .eq('id', recipeId)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error('更新失败：' + error.message);
+  return data ? fromRow(data) : null;
+}
+
 export async function ensureDefaultFolder(client, userId) {
   const folders = await listFolders(client, userId);
   let owned = folders.find((f) => f.isOwner);

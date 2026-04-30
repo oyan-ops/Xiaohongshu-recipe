@@ -1520,6 +1520,34 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
   const otherFolders = (folders || []).filter(f => f.id !== recipe.folderId);
   const [planDate, setPlanDate] = useState(todayISO());
   const [planAdded, setPlanAdded] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitle, setEditTitle] = useState(recipe.title || '');
+  const [saveTitle, setSaveTitle] = useState(false);
+
+  const updateTitle = async () => {
+    if (!editTitle.trim()) {
+      setEditTitle(recipe.title || '');
+      setEditingTitle(false);
+      return;
+    }
+    setSaveTitle(true);
+    try {
+      const res = await authFetch(`/api/recipes/${recipe.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle.trim() }),
+      });
+      if (!res.ok) throw new Error('保存失败');
+      recipe.title = editTitle.trim();
+      setEditingTitle(false);
+    } catch (e) {
+      console.error(e);
+      setEditTitle(recipe.title || '');
+      setEditingTitle(false);
+    } finally {
+      setSaveTitle(false);
+    }
+  };
 
   const addToPlan = async () => {
     const res = await authFetch('/api/plans', {
@@ -1549,7 +1577,23 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
           {recipe.coverImage && (
             <img className="sheet-img" src={recipe.coverImage} alt="" referrerPolicy="no-referrer" />
           )}
-          <h2>{recipe.title || '未命名'}</h2>
+          {editingTitle ? (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+              <input
+                type="text"
+                className="input"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && updateTitle()}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+              <button className="btn coral" onClick={updateTitle} disabled={saveTitle}>{saveTitle ? '保存中...' : '保存'}</button>
+              <button className="btn ghost" onClick={() => { setEditTitle(recipe.title || ''); setEditingTitle(false); }}>取消</button>
+            </div>
+          ) : (
+            <h2 style={{ cursor: 'pointer' }} onClick={() => setEditingTitle(true)}>{recipe.title || '未命名'}</h2>
+          )}
           {recipe.description && <p className="desc">{recipe.description}</p>}
           {recipe.author && <p className="author">— {recipe.author}</p>}
           {addedBy && <p className="author" style={{ marginTop: 4 }}>由 {addedBy} 添加</p>}

@@ -5,7 +5,7 @@ import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
 import {
   clientForUser, adminClient,
-  insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource,
+  insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource, updateRecipeTitle,
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
@@ -284,6 +284,16 @@ app.delete('/api/folders/:id', requireAuth, async (req, res) => {
 app.patch('/api/recipes/:id/folder', requireAuth, async (req, res) => {
   try {
     const updated = await moveRecipe(req.client, req.params.id, req.body?.folderId || null);
+    if (!updated) return res.status(404).json({ error: '未找到' });
+    res.json({ recipe: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/recipes/:id', requireAuth, async (req, res) => {
+  try {
+    const updated = await updateRecipeTitle(req.client, req.params.id, req.body?.title || '');
     if (!updated) return res.status(404).json({ error: '未找到' });
     res.json({ recipe: updated });
   } catch (err) {
