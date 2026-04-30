@@ -591,6 +591,56 @@ function HeatMap({ plans }) {
   );
 }
 
+function TopRecipes({ plans }) {
+  // 统计每道菜被做过多少次，取前5个
+  const recipeCounts = {};
+  for (const p of plans) {
+    if (!p.cooked || !p.recipe) continue;
+    const key = p.recipeId;
+    recipeCounts[key] = (recipeCounts[key] || 0) + 1;
+  }
+
+  const sorted = Object.entries(recipeCounts)
+    .map(([recipeId, count]) => {
+      const p = plans.find(pl => pl.recipeId === recipeId && pl.recipe);
+      return { recipeId, count, recipe: p?.recipe };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  if (sorted.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 28, paddingBottom: 24, borderBottom: '1px solid var(--border)' }}>
+      <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>常做的菜</h3>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {sorted.map((item, idx) => (
+          <div key={item.recipeId} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '10px 12px', backgroundColor: 'var(--bg-raised)', borderRadius: 8
+          }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%', backgroundColor: 'var(--primary)',
+              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 600
+            }}>
+              {idx + 1}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink)' }}>
+                {item.recipe?.title || '(食谱已删除)'}
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              {item.count} 次
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RangeAddBar({ plans, today, onAdd }) {
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(() => {
@@ -728,7 +778,12 @@ function PlanView({ cart, mode, session }) {
         </div>
       </div>
 
-      {mode === 'history' && <HeatMap plans={plans} />}
+      {mode === 'history' && (
+        <>
+          <HeatMap plans={plans} />
+          <TopRecipes plans={plans} />
+        </>
+      )}
       {mode === 'plan' && (
         <RangeAddBar
           plans={plans}
