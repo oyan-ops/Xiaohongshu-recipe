@@ -215,15 +215,25 @@ export async function deleteRecipe(client, id) {
 }
 
 export async function findRecipesBySource(client, sourceUrl, noteId) {
-  const ors = [];
-  if (sourceUrl) ors.push(`source_url.eq.${sourceUrl}`);
-  if (noteId) ors.push(`source_url.ilike.%${noteId}%`);
-  if (ors.length === 0) return [];
-  const { data, error } = await client
-    .from('recipes')
-    .select('*')
-    .or(ors.join(','))
-    .order('extracted_at', { ascending: false });
-  if (error) throw new Error('查重失败：' + error.message);
-  return (data || []).map(fromRow);
+  // PostgREST .or() 对包含 :/?,& 等特殊字符的 URL 处理不好,改成两次独立查询合并去重。
+  const collected = new Map();
+  if (noteId) {
+    const { data, error } = await client
+      .from('recipes')
+      .select('*')
+      .ilike('source_url', `%${noteId}%`)
+      .order('extracted_at', { ascending: false });
+    if (error) throw new Error('查重失败：' + error.message);
+    for (const r of data || []) collected.set(r.id, r);
+  }
+  if (sourceUrl) {
+    const { data, error } = await client
+      .from('recipes')
+      .select('*')
+      .eq('source_url', sourceUrl)
+      .order('extracted_at', { ascending: false });
+    if (error) throw new Error('查重失败：' + error.message);
+    for (const r of data || []) collected.set(r.id, r);
+  }
+  return Array.from(collected.values()).map(fromRow);
 }
