@@ -400,38 +400,69 @@ const formatFullDate = (iso) => {
   const d = new Date(iso + 'T00:00:00');
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 };
+const isoFor = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const weekdayShort = (iso) => ['日','一','二','三','四','五','六'][new Date(iso + 'T00:00:00').getDay()];
+const weekdayLong = (iso) => '周' + weekdayShort(iso);
+const relativeLabel = (iso) => {
+  const d = new Date(iso + 'T00:00:00');
+  const t = new Date(todayISO() + 'T00:00:00');
+  const diff = Math.round((d - t) / 86400000);
+  if (diff === 0) return '今天';
+  if (diff === 1) return '明天';
+  if (diff === -1) return '昨天';
+  if (diff > 1) return `${diff} 天后`;
+  return `${-diff} 天前`;
+};
+const monthDayLabel = (iso) => {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+};
+
+function startOfMonth(year, month) { return new Date(year, month, 1); }
+function buildMonthGrid(year, month) {
+  // returns array of ISO date strings for a 6-row x 7-col grid covering the month, padded with prev/next month days
+  const first = startOfMonth(year, month);
+  const startWeekday = first.getDay(); // 0 sun
+  const start = new Date(first);
+  start.setDate(start.getDate() - startWeekday);
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    cells.push({ iso: isoFor(d), inMonth: d.getMonth() === month });
+  }
+  return cells;
+}
 
 function PlanView({ cart, mode }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showPicker, setShowPicker] = useState(null); // date string
+  const [showPicker, setShowPicker] = useState(null);
+  const today = todayISO();
+  const initialDate = today;
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
 
   const load = async () => {
     setLoading(true);
     try {
-      let url;
-      if (mode === 'history') {
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-        const farPast = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
-        url = `/api/plans?from=${farPast}&to=${yesterday}`;
-      } else {
-        const from = todayISO();
-        const to = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
-        url = `/api/plans?from=${from}&to=${to}`;
-      }
+      // Pull a generous window: previous month, this month, next month — covers grid + neighbours.
+      const start = new Date(viewYear, viewMonth - 1, 1);
+      const end = new Date(viewYear, viewMonth + 2, 0);
+      const url = `/api/plans?from=${isoFor(start)}&to=${isoFor(end)}`;
       const res = await authFetch(url);
       const data = await res.json();
       setPlans(data.plans || []);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [mode]);
+  useEffect(() => { load(); }, [mode, viewYear, viewMonth]);
 
   const remove = async (planId) => {
     await authFetch(`/api/plans/${planId}`, { method: 'DELETE' });
     load();
   };
-
   const toggleCooked = async (plan) => {
     await authFetch(`/api/plans/${plan.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -439,108 +470,126 @@ function PlanView({ cart, mode }) {
     });
     load();
   };
-
   const addAllToCart = (recipeIds) => {
     for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
   };
 
-  // group plans by date
   const byDate = new Map();
   for (const p of plans) {
     if (!byDate.has(p.date)) byDate.set(p.date, []);
     byDate.get(p.date).push(p);
   }
 
-  // For plan mode: ensure today + next 6 days even if empty.
-  // For history mode: only show days that have entries (most recent first).
-  let days;
-  if (mode === 'history') {
-    days = Array.from(byDate.keys()).sort().reverse();
-  } else {
-    days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
-      days.push(d);
-    }
-    for (const d of byDate.keys()) if (!days.includes(d)) days.push(d);
-    days.sort();
-  }
+  const grid = buildMonthGrid(viewYear, viewMonth);
 
-  if (loading) return <p className="empty">加载中…</p>;
+  const goPrev = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const goNext = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+  const goToday = () => {
+    const n = new Date();
+    setViewYear(n.getFullYear());
+    setViewMonth(n.getMonth());
+    setSelectedDate(today);
+  };
+
+  const selectedList = byDate.get(selectedDate) || [];
+  const isToday = selectedDate === today;
+  const isFuture = selectedDate >= today;
+  const allowEdit = mode === 'plan' ? isFuture : true; // history can still toggle/remove
 
   return (
     <div>
       <div className="section-head">
         {mode === 'history'
-          ? <>
-              <h2>做菜记录</h2>
-              <p>过去做过的菜,翻翻看自己的厨艺历程。</p>
-            </>
-          : <>
-              <h2>本周做菜计划</h2>
-              <p>规划每天要做的菜,可以一键加入菜单去买菜。做完了点 ☐ 标为「做过」。</p>
-            </>
+          ? <><h2>做菜记录</h2><p>翻翻你过去做过的菜。点 ☑ 表示当天确实做了。</p></>
+          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。今天的圆点是珊瑚红。</p></>
         }
       </div>
 
-      {days.length === 0 && mode === 'history' && (
-        <div className="empty">
-          <h3>还没有记录</h3>
-          <p>在「计划」里把做过的菜勾上 ✓ 就会出现在这里</p>
+      <div className="cal">
+        <div className="cal-head">
+          <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={goPrev}>‹</button>
+          <div className="cal-title">{viewYear} 年 {viewMonth + 1} 月</div>
+          <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 13 }} onClick={goNext}>›</button>
+          <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12, marginLeft: 8 }} onClick={goToday}>今天</button>
         </div>
-      )}
+        <div className="cal-weekdays">
+          {['日','一','二','三','四','五','六'].map((w) => <div key={w}>{w}</div>)}
+        </div>
+        <div className="cal-grid">
+          {grid.map(({ iso, inMonth }) => {
+            const has = byDate.has(iso);
+            const list = byDate.get(iso) || [];
+            const allCooked = list.length > 0 && list.every(p => p.cooked);
+            return (
+              <button
+                key={iso}
+                className={[
+                  'cal-cell',
+                  inMonth ? '' : 'out',
+                  iso === today ? 'today' : '',
+                  iso === selectedDate ? 'selected' : '',
+                  has ? 'has' : '',
+                  allCooked ? 'all-cooked' : '',
+                ].join(' ')}
+                onClick={() => setSelectedDate(iso)}
+              >
+                <span className="cal-num">{new Date(iso + 'T00:00:00').getDate()}</span>
+                {has && <span className="cal-dot" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {days.map((d) => {
-          const today = d === todayISO();
-          const list = byDate.get(d) || [];
-          return (
-            <div key={d} className={`plan-day ${today ? 'today' : ''}`}>
-              <div className="plan-day-head">
-                <div>
-                  <h3>{formatDateLabel(d)}</h3>
-                  <div className="plan-date-sub">{formatFullDate(d)}</div>
-                </div>
-                {mode === 'plan' && (
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {list.length > 0 && (
-                      <button
-                        className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                        onClick={() => addAllToCart(list.map(p => p.recipeId))}
-                      >全部加入菜单</button>
-                    )}
-                    <button
-                      className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                      onClick={() => setShowPicker(d)}
-                    >+ 加菜</button>
-                  </div>
-                )}
-              </div>
-              {list.length === 0
-                ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>这一天还没安排</p>
-                : (
-                  <div className="plan-cards">
-                    {list.map((p) => (
-                      <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
-                        <button
-                          className="plan-cooked-toggle"
-                          onClick={() => toggleCooked(p)}
-                          title={p.cooked ? '取消标记' : '标记为做过'}
-                        >{p.cooked ? '☑' : '☐'}</button>
-                        {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
-                        <div className="plan-card-body">
-                          <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
-                          {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
-                        </div>
-                        <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
-                      </div>
-                    ))}
-                  </div>
-                )
-              }
+      <div className={`plan-day ${isToday ? 'today' : ''}`} style={{ marginTop: 24 }}>
+        <div className="plan-day-head">
+          <div>
+            <div className="plan-big-date">{monthDayLabel(selectedDate)}</div>
+            <div className="plan-weekday">{weekdayLong(selectedDate)}</div>
+            <div className="plan-relative">{relativeLabel(selectedDate)} · {formatFullDate(selectedDate)}</div>
+          </div>
+          {mode === 'plan' && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {selectedList.length > 0 && (
+                <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                  onClick={() => addAllToCart(selectedList.map(p => p.recipeId))}>全部加入菜单</button>
+              )}
+              {allowEdit && (
+                <button className="btn coral" style={{ padding: '6px 14px', fontSize: 12 }}
+                  onClick={() => setShowPicker(selectedDate)}>+ 加菜</button>
+              )}
             </div>
-          );
-        })}
+          )}
+        </div>
+
+        {loading
+          ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>加载中…</p>
+          : selectedList.length === 0
+            ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>
+                {mode === 'history' ? '这一天没有记录' : '这一天还没安排,点 + 加菜'}
+              </p>
+            : (
+              <div className="plan-cards">
+                {selectedList.map((p) => (
+                  <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
+                    <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
+                    {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
+                    <div className="plan-card-body">
+                      <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
+                      {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
+                    </div>
+                    <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                  </div>
+                ))}
+              </div>
+            )
+        }
       </div>
 
       {showPicker && (
