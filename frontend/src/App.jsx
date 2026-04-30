@@ -434,6 +434,132 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
+function parseMinutes(s) {
+  if (!s) return 0;
+  let mins = 0;
+  const h = String(s).match(/(\d+(?:\.\d+)?)\s*(小时|h|hour)/i);
+  const m = String(s).match(/(\d+)\s*(分|min)/i);
+  if (h) mins += Math.round(parseFloat(h[1]) * 60);
+  if (m) mins += parseInt(m[1]);
+  if (!h && !m) {
+    const n = parseInt(String(s));
+    if (!isNaN(n)) mins = n;
+  }
+  return mins;
+}
+
+function HeatMap({ plans }) {
+  // 12 weeks ending today, oldest column on the left.
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const offsetSinceMonday = (today.getDay() + 6) % 7; // monday=0
+  const lastMon = new Date(today); lastMon.setDate(today.getDate() - offsetSinceMonday);
+  const startMon = new Date(lastMon); startMon.setDate(lastMon.getDate() - 7 * 11);
+
+  const minutesByDate = {};
+  for (const p of plans) {
+    if (!p.cooked) continue;
+    minutesByDate[p.date] = (minutesByDate[p.date] || 0) + parseMinutes(p.recipe?.cookTime);
+  }
+
+  const cells = [];
+  for (let w = 0; w < 12; w++) {
+    const col = [];
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(startMon);
+      cell.setDate(cell.getDate() + w * 7 + d);
+      const iso = isoFor(cell);
+      const mins = minutesByDate[iso] || 0;
+      const future = cell > today;
+      let level = 0;
+      if (mins > 0 && mins < 30) level = 1;
+      else if (mins < 60) level = 2;
+      else if (mins < 120) level = 3;
+      else if (mins >= 120) level = 4;
+      col.push({ iso, mins, level, future });
+    }
+    cells.push(col);
+  }
+
+  const monthLabels = cells.map((col, i) => {
+    const d = new Date(col[0].iso + 'T00:00:00');
+    if (i === 0) return `${d.getMonth() + 1}月`;
+    const prev = new Date(cells[i - 1][0].iso + 'T00:00:00');
+    return prev.getMonth() !== d.getMonth() ? `${d.getMonth() + 1}月` : '';
+  });
+
+  return (
+    <div className="heatmap">
+      <div className="heatmap-row">
+        <div className="heatmap-row-label" />
+        {monthLabels.map((m, i) => <div key={i} className="heatmap-month">{m}</div>)}
+      </div>
+      {[0, 1, 2, 3, 4, 5, 6].map((d) => (
+        <div key={d} className="heatmap-row">
+          <div className="heatmap-row-label">{d % 2 === 1 ? ['','一','','三','','五',''][d] : ''}</div>
+          {cells.map((col, w) => {
+            const c = col[d];
+            return (
+              <div
+                key={w}
+                className={`heatmap-cell level-${c.level} ${c.future ? 'future' : ''}`}
+                title={`${c.iso}${c.mins ? ` · ${c.mins} 分钟` : ''}`}
+              />
+            );
+          })}
+        </div>
+      ))}
+      <div className="heatmap-legend">
+        少 <span className="heatmap-cell level-0" /> <span className="heatmap-cell level-1" />
+        <span className="heatmap-cell level-2" /> <span className="heatmap-cell level-3" />
+        <span className="heatmap-cell level-4" /> 多
+      </div>
+    </div>
+  );
+}
+
+function RangeAddBar({ plans, today, onAdd }) {
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 6);
+    return isoFor(d);
+  });
+  const [done, setDone] = useState(false);
+
+  const inRange = plans.filter(p => p.date >= from && p.date <= to);
+  const ids = Array.from(new Set(inRange.map(p => p.recipeId)));
+
+  const apply = () => {
+    if (ids.length === 0) return;
+    onAdd(ids);
+    setDone(true);
+    setTimeout(() => setDone(false), 1500);
+  };
+
+  const setQuick = (days) => {
+    const d = new Date(); d.setDate(d.getDate() + days - 1);
+    setFrom(today);
+    setTo(isoFor(d));
+  };
+
+  return (
+    <div className="range-bar">
+      <div className="range-row">
+        <span className="range-label">提前买菜</span>
+        <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
+        <span style={{ color: 'var(--ink-mute)' }}>到</span>
+        <input type="date" className="input" value={to} onChange={e => setTo(e.target.value)} />
+      </div>
+      <div className="range-row">
+        <button className="btn ghost" style={{ padding: '6px 10px', fontSize: 12 }} onClick={() => setQuick(3)}>未来 3 天</button>
+        <button className="btn ghost" style={{ padding: '6px 10px', fontSize: 12 }} onClick={() => setQuick(7)}>未来 7 天</button>
+        <button className="btn coral" style={{ padding: '8px 14px', fontSize: 13 }} onClick={apply} disabled={ids.length === 0}>
+          {done ? '已加入 ✓' : `加入菜单 (${ids.length} 道)`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PlanView({ cart, mode }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -474,8 +600,10 @@ function PlanView({ cart, mode }) {
     for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
   };
 
+  // History mode shows only cooked entries; plan mode shows everything.
+  const visiblePlans = mode === 'history' ? plans.filter(p => p.cooked) : plans;
   const byDate = new Map();
-  for (const p of plans) {
+  for (const p of visiblePlans) {
     if (!byDate.has(p.date)) byDate.set(p.date, []);
     byDate.get(p.date).push(p);
   }
@@ -506,10 +634,19 @@ function PlanView({ cart, mode }) {
     <div>
       <div className="section-head">
         {mode === 'history'
-          ? <><h2>做菜记录</h2><p>翻翻你过去做过的菜。点 ☑ 表示当天确实做了。</p></>
-          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。今天的圆点是珊瑚红。</p></>
+          ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
+          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
         }
       </div>
+
+      {mode === 'history' && <HeatMap plans={plans} />}
+      {mode === 'plan' && (
+        <RangeAddBar
+          plans={plans}
+          today={today}
+          onAdd={(ids) => addAllToCart(ids)}
+        />
+      )}
 
       <div className="cal">
         <div className="cal-head">
@@ -578,13 +715,17 @@ function PlanView({ cart, mode }) {
               <div className="plan-cards">
                 {selectedList.map((p) => (
                   <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
-                    <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
+                    {mode === 'plan' && (
+                      <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
+                    )}
                     {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
                     <div className="plan-card-body">
                       <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
                       {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
                     </div>
-                    <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                    {mode === 'plan' && (
+                      <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                    )}
                   </div>
                 ))}
               </div>
