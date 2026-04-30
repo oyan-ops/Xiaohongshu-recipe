@@ -355,8 +355,17 @@ function CartDrawer({ cart, onClose }) {
     return lines.join('\n');
   };
 
+  const buildSimpleList = () => {
+    const names = grouped.map(g => g.name);
+    return names.join('\n');
+  };
+
   const copy = async () => {
     try { await navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  };
+
+  const copySimple = async () => {
+    try { await navigator.clipboard.writeText(buildSimpleList()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   };
 
   const download = () => {
@@ -364,6 +373,14 @@ function CartDrawer({ cart, onClose }) {
     const u = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = u; a.download = `菜单-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
+    URL.revokeObjectURL(u);
+  };
+
+  const downloadSimple = () => {
+    const blob = new Blob([buildSimpleList()], { type: 'text/plain;charset=utf-8' });
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = u; a.download = `食材-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
     URL.revokeObjectURL(u);
   };
 
@@ -435,8 +452,10 @@ function CartDrawer({ cart, onClose }) {
                 </div>
               </div>
               <div className="actions">
-                <button className="btn coral" onClick={copy}>{copied ? '已复制 ✓' : '复制为文字'}</button>
-                <button className="btn ghost" onClick={download}>下载 .txt</button>
+                <button className="btn coral" onClick={copy}>{copied ? '已复制 ✓' : '复制清单'}</button>
+                <button className="btn ghost" onClick={download}>下载详细清单</button>
+                <button className="btn ghost" onClick={copySimple}>复制食材名</button>
+                <button className="btn ghost" onClick={downloadSimple}>下载食材名</button>
                 <button className="btn ghost" onClick={() => setView('list')}>← 返回菜单</button>
               </div>
             </>
