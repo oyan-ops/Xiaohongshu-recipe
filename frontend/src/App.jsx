@@ -339,7 +339,12 @@ function Extract({ folders, activeFolder, onExtracted }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: target, folderId: destFolder }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch {
+        throw new Error(`服务器返回异常 (HTTP ${res.status})。请稍后重试。${text.slice(0, 120)}`);
+      }
       if (!res.ok) throw new Error(data.error || '抓取失败');
       const n = data.count || 1;
       setStatus(data.duplicate
