@@ -290,6 +290,17 @@ app.patch('/api/recipes/:id/folder', requireAuth, async (req, res) => {
   }
 });
 
+app.patch('/api/recipes/batch/move', requireAuth, async (req, res) => {
+  try {
+    const { ids, folderId } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: '至少选择一条食谱' });
+    const results = await Promise.all(ids.map(id => moveRecipe(req.client, id, folderId || null)));
+    res.json({ moved: results.filter(r => r).length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/recipes/:id', requireAuth, async (req, res) => {
   try {
     const recipe = await getRecipe(req.client, req.params.id);

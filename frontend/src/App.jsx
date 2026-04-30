@@ -1085,6 +1085,7 @@ function Extract({ folders, activeFolder, onExtracted }) {
 
 function Library({ recipes, loading, reload, folders, activeFolder, session, cart }) {
   const [selected, setSelected] = useState(null);
+  const [selectedBatch, setSelectedBatch] = useState(new Set());
   const [q, setQ] = useState('');
   const [userMap, setUserMap] = useState({});
 
@@ -1120,6 +1121,16 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
     reload();
   };
 
+  const bulkMoveTo = async (folderId) => {
+    if (selectedBatch.size === 0) return;
+    await authFetch(`/api/recipes/batch/move`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedBatch), folderId }),
+    });
+    setSelectedBatch(new Set());
+    reload();
+  };
+
   const filtered = recipes.filter(r => {
     const term = q.toLowerCase();
     return !term
@@ -1144,14 +1155,46 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
 
   return (
     <div>
-      <div className="search">
+      <div className="search" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           className="input"
           value={q}
           onChange={e => setQ(e.target.value)}
           placeholder="搜索食谱或标签"
+          style={{ flex: 1 }}
         />
+        {filtered.length > 0 && (
+          <button
+            className="btn ghost"
+            style={{ padding: '8px 12px', fontSize: 12, whiteSpace: 'nowrap' }}
+            onClick={() => selectedBatch.size > 0 ? setSelectedBatch(new Set()) : setSelectedBatch(new Set(filtered.map(r => r.id)))}
+          >
+            {selectedBatch.size > 0 ? '取消全选' : '批量移动'}
+          </button>
+        )}
       </div>
+      {selectedBatch.size > 0 && (
+        <div style={{ padding: '12px 16px', backgroundColor: '#EFF6FF', borderBottom: '1px solid #D1E0FF', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>已选择 {selectedBatch.size} 道食谱</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              className="input"
+              style={{ width: 'auto', padding: '8px 12px', fontSize: 14 }}
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  bulkMoveTo(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+            >
+              <option value="">移到...</option>
+              {folders.filter(f => f.id !== activeFolder).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setSelectedBatch(new Set())}>取消选择</button>
+          </div>
+        </div>
+      )}
       <p className="lib-meta">{filtered.length} 道食谱</p>
 
       {filtered.length === 0 ? (
@@ -1162,7 +1205,36 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
       ) : (
         <div className="cards">
           {filtered.map(r => (
-            <div key={r.id} className="card" onClick={() => open(r.id)}>
+            <div
+              key={r.id}
+              className={`card ${selectedBatch.has(r.id) ? 'selected' : ''}`}
+              style={{ position: 'relative', cursor: selectedBatch.size > 0 ? 'pointer' : 'default' }}
+              onClick={() => {
+                if (selectedBatch.size > 0) {
+                  const newSet = new Set(selectedBatch);
+                  if (newSet.has(r.id)) newSet.delete(r.id);
+                  else newSet.add(r.id);
+                  setSelectedBatch(newSet);
+                } else {
+                  open(r.id);
+                }
+              }}
+            >
+              {selectedBatch.size > 0 && (
+                <input
+                  type="checkbox"
+                  checked={selectedBatch.has(r.id)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    const newSet = new Set(selectedBatch);
+                    if (newSet.has(r.id)) newSet.delete(r.id);
+                    else newSet.add(r.id);
+                    setSelectedBatch(newSet);
+                  }}
+                  style={{ position: 'absolute', top: 12, left: 12, width: 18, height: 18, zIndex: 10, cursor: 'pointer' }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              )}
               {r.coverImage
                 ? <img className="card-img" src={r.coverImage} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 : <div className="card-img placeholder" />}
