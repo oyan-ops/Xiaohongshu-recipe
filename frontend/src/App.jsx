@@ -175,6 +175,7 @@ function Main({ session }) {
           <button className={`tab ${tab === 'extract' ? 'active' : ''}`} onClick={() => setTab('extract')}>提取</button>
           <button className={`tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>我的食谱</button>
           <button className={`tab ${tab === 'plan' ? 'active' : ''}`} onClick={() => setTab('plan')}>计划</button>
+          <button className={`tab ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>记录</button>
         </div>
       </header>
 
@@ -209,7 +210,12 @@ function Main({ session }) {
         )}
         {tab === 'plan' && (
           <div className="slide-up">
-            <PlanView cart={cart} />
+            <PlanView cart={cart} mode="plan" />
+          </div>
+        )}
+        {tab === 'history' && (
+          <div className="slide-up">
+            <PlanView cart={cart} mode="history" />
           </div>
         )}
       </main>
@@ -386,11 +392,16 @@ const formatDateLabel = (iso) => {
   else if (diff === 1) label = '明天';
   else if (diff === -1) label = '昨天';
   else if (diff > 1 && diff < 7) label = `${diff} 天后`;
+  else if (diff < -1 && diff > -7) label = `${-diff} 天前`;
   else label = `${d.getMonth() + 1}月${d.getDate()}日`;
   return `${label} · ${wd}`;
 };
+const formatFullDate = (iso) => {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+};
 
-function PlanView({ cart }) {
+function PlanView({ cart, mode }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null); // date string
@@ -398,18 +409,34 @@ function PlanView({ cart }) {
   const load = async () => {
     setLoading(true);
     try {
-      const from = todayISO();
-      const to = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
-      const res = await authFetch(`/api/plans?from=${from}&to=${to}`);
+      let url;
+      if (mode === 'history') {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        const farPast = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+        url = `/api/plans?from=${farPast}&to=${yesterday}`;
+      } else {
+        const from = todayISO();
+        const to = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+        url = `/api/plans?from=${from}&to=${to}`;
+      }
+      const res = await authFetch(url);
       const data = await res.json();
       setPlans(data.plans || []);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [mode]);
 
   const remove = async (planId) => {
     await authFetch(`/api/plans/${planId}`, { method: 'DELETE' });
+    load();
+  };
+
+  const toggleCooked = async (plan) => {
+    await authFetch(`/api/plans/${plan.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cooked: !plan.cooked }),
+    });
     load();
   };
 
@@ -424,23 +451,44 @@ function PlanView({ cart }) {
     byDate.get(p.date).push(p);
   }
 
-  // ensure today + next 6 days are in the list (even if empty)
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
-    days.push(d);
+  // For plan mode: ensure today + next 6 days even if empty.
+  // For history mode: only show days that have entries (most recent first).
+  let days;
+  if (mode === 'history') {
+    days = Array.from(byDate.keys()).sort().reverse();
+  } else {
+    days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
+      days.push(d);
+    }
+    for (const d of byDate.keys()) if (!days.includes(d)) days.push(d);
+    days.sort();
   }
-  for (const d of byDate.keys()) if (!days.includes(d)) days.push(d);
-  days.sort();
 
   if (loading) return <p className="empty">加载中…</p>;
 
   return (
     <div>
       <div className="section-head">
-        <h2>本周做菜计划</h2>
-        <p>规划每天要做的菜,可以一键加入菜单去买菜。</p>
+        {mode === 'history'
+          ? <>
+              <h2>做菜记录</h2>
+              <p>过去做过的菜,翻翻看自己的厨艺历程。</p>
+            </>
+          : <>
+              <h2>本周做菜计划</h2>
+              <p>规划每天要做的菜,可以一键加入菜单去买菜。做完了点 ☐ 标为「做过」。</p>
+            </>
+        }
       </div>
+
+      {days.length === 0 && mode === 'history' && (
+        <div className="empty">
+          <h3>还没有记录</h3>
+          <p>在「计划」里把做过的菜勾上 ✓ 就会出现在这里</p>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {days.map((d) => {
@@ -449,26 +497,36 @@ function PlanView({ cart }) {
           return (
             <div key={d} className={`plan-day ${today ? 'today' : ''}`}>
               <div className="plan-day-head">
-                <h3>{formatDateLabel(d)}</h3>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {list.length > 0 && (
+                <div>
+                  <h3>{formatDateLabel(d)}</h3>
+                  <div className="plan-date-sub">{formatFullDate(d)}</div>
+                </div>
+                {mode === 'plan' && (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {list.length > 0 && (
+                      <button
+                        className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                        onClick={() => addAllToCart(list.map(p => p.recipeId))}
+                      >全部加入菜单</button>
+                    )}
                     <button
                       className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                      onClick={() => addAllToCart(list.map(p => p.recipeId))}
-                    >全部加入菜单</button>
-                  )}
-                  <button
-                    className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                    onClick={() => setShowPicker(d)}
-                  >+ 加菜</button>
-                </div>
+                      onClick={() => setShowPicker(d)}
+                    >+ 加菜</button>
+                  </div>
+                )}
               </div>
               {list.length === 0
                 ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>这一天还没安排</p>
                 : (
                   <div className="plan-cards">
                     {list.map((p) => (
-                      <div key={p.id} className="plan-card">
+                      <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
+                        <button
+                          className="plan-cooked-toggle"
+                          onClick={() => toggleCooked(p)}
+                          title={p.cooked ? '取消标记' : '标记为做过'}
+                        >{p.cooked ? '☑' : '☐'}</button>
                         {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
                         <div className="plan-card-body">
                           <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>

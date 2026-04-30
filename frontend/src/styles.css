@@ -350,6 +350,30 @@ main { padding: 32px 0 64px; }
   color: var(--ink);
   letter-spacing: -0.01em;
 }
+.plan-date-sub {
+  font-size: 11px;
+  color: var(--ink-mute);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.plan-cooked-toggle {
+  font-size: 20px;
+  color: var(--ink-soft);
+  padding: 0 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.plan-cooked-toggle:hover { color: var(--coral); }
+.plan-card.cooked {
+  opacity: 0.55;
+}
+.plan-card.cooked .plan-card-title {
+  text-decoration: line-through;
+}
+.plan-card.cooked .plan-cooked-toggle {
+  color: var(--coral);
+}
 .plan-cards {
   display: flex;
   flex-direction: column;

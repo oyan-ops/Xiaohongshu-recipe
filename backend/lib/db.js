@@ -265,7 +265,7 @@ export function adminClient() {
 export async function listPlans(client, fromDate, toDate) {
   let q = client
     .from('meal_plans')
-    .select('id, plan_date, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients)')
+    .select('id, plan_date, cooked, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients)')
     .order('plan_date', { ascending: true });
   if (fromDate) q = q.gte('plan_date', fromDate);
   if (toDate) q = q.lte('plan_date', toDate);
@@ -274,6 +274,7 @@ export async function listPlans(client, fromDate, toDate) {
   return (data || []).map((p) => ({
     id: p.id,
     date: p.plan_date,
+    cooked: !!p.cooked,
     recipeId: p.recipe_id,
     recipe: p.recipes ? {
       id: p.recipes.id,
@@ -286,6 +287,17 @@ export async function listPlans(client, fromDate, toDate) {
       ingredients: p.recipes.ingredients || [],
     } : null,
   }));
+}
+
+export async function updatePlanCooked(client, id, cooked) {
+  const { data, error } = await client
+    .from('meal_plans')
+    .update({ cooked })
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error('更新失败：' + error.message);
+  return data ? { id: data.id, cooked: !!data.cooked } : null;
 }
 
 export async function createPlan(client, userId, recipeId, date) {

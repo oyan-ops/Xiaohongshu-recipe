@@ -9,7 +9,7 @@ import {
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
-  listPlans, createPlan, deletePlan,
+  listPlans, createPlan, deletePlan, updatePlanCooked,
 } from './lib/db.js';
 
 const app = express();
@@ -319,6 +319,17 @@ app.post('/api/plans', requireAuth, async (req, res) => {
   try {
     const plan = await createPlan(req.client, req.userId, recipeId, date);
     res.json({ plan, duplicate: !plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/plans/:id', requireAuth, async (req, res) => {
+  try {
+    const cooked = !!req.body?.cooked;
+    const plan = await updatePlanCooked(req.client, req.params.id, cooked);
+    if (!plan) return res.status(404).json({ error: '未找到' });
+    res.json({ plan });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
