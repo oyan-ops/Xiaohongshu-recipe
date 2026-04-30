@@ -513,7 +513,7 @@ main { padding: 32px 0 64px; }
   height: 12px;
   box-sizing: border-box;
 }
-.heatmap-cell.level-0 { background: transparent; border-color: var(--line); }
+.heatmap-cell.level-0 { background: #FFFFFF; border-color: var(--line); }
 .heatmap-cell.level-1 { background: #F8E2D7; border-color: #F8E2D7; }
 .heatmap-cell.level-2 { background: #EFB196; border-color: #EFB196; }
 .heatmap-cell.level-3 { background: #D67B5C; border-color: #D67B5C; }

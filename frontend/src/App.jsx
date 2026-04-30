@@ -568,7 +568,6 @@ function PlanView({ cart, mode }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null);
-  const [evaluating, setEvaluating] = useState(false);
   const today = todayISO();
   const initialDate = today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -605,19 +604,6 @@ function PlanView({ cart, mode }) {
     for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
   };
 
-  const evaluateAll = async () => {
-    setEvaluating(true);
-    try {
-      const res = await authFetch('/api/recipes/evaluate-all', { method: 'POST' });
-      if (!res.ok) throw new Error('评估失败');
-      await load();
-    } catch (e) {
-      alert('评估出错: ' + e.message);
-    } finally {
-      setEvaluating(false);
-    }
-  };
-
   // History mode shows only cooked entries; plan mode shows everything.
   const visiblePlans = mode === 'history' ? plans.filter(p => p.cooked) : plans;
   const byDate = new Map();
@@ -651,19 +637,10 @@ function PlanView({ cart, mode }) {
   return (
     <div>
       <div className="section-head">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            {mode === 'history'
-              ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
-              : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
-            }
-          </div>
-          {mode === 'history' && (
-            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }} onClick={evaluateAll} disabled={evaluating}>
-              {evaluating ? '评估中…' : '评估所有菜'}
-            </button>
-          )}
-        </div>
+        {mode === 'history'
+          ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
+          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
+        }
       </div>
 
       {mode === 'history' && <HeatMap plans={plans} />}

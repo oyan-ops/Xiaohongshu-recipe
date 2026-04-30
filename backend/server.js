@@ -312,7 +312,30 @@ app.delete('/api/recipes/:id', requireAuth, async (req, res) => {
 
 app.get('/api/plans', requireAuth, async (req, res) => {
   try {
-    res.json({ plans: await listPlans(req.client, req.query.from || null, req.query.to || null) });
+    const plans = await listPlans(req.client, req.query.from || null, req.query.to || null);
+    res.json({ plans });
+    // 后台异步评估未评分的菜谱，不阻塞用户请求
+    (async () => {
+      try {
+        const { data, error } = await req.client.from('recipes').select('*').is('difficulty', null);
+        if (error || !data) return;
+        for (const row of data) {
+          try {
+            const score = await evaluateRecipe({
+              title: row.title,
+              ingredients: row.ingredients,
+              steps: row.steps,
+              cookTime: row.cook_time,
+              prepTime: row.prep_time,
+            });
+            if (!score) continue;
+            await req.client.from('recipes')
+              .update({ difficulty: score.difficulty, effort_minutes: score.effortMinutes })
+              .eq('id', row.id);
+          } catch (_) {}
+        }
+      } catch (_) {}
+    })();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
