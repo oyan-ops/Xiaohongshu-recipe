@@ -1323,6 +1323,7 @@ function Extract({ folders, activeFolder, onExtracted }) {
 function Library({ recipes, loading, reload, folders, activeFolder, session, cart }) {
   const [selected, setSelected] = useState(null);
   const [selectedBatch, setSelectedBatch] = useState(new Set());
+  const [batchMode, setBatchMode] = useState(false);
   const [q, setQ] = useState('');
   const [userMap, setUserMap] = useState({});
 
@@ -1404,31 +1405,51 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
           <button
             className="btn ghost"
             style={{ padding: '8px 12px', fontSize: 12, whiteSpace: 'nowrap' }}
-            onClick={() => selectedBatch.size > 0 ? setSelectedBatch(new Set()) : setSelectedBatch(new Set(filtered.map(r => r.id)))}
+            onClick={() => {
+              setBatchMode(!batchMode);
+              if (batchMode) setSelectedBatch(new Set());
+            }}
           >
-            {selectedBatch.size > 0 ? '取消全选' : '批量移动'}
+            {batchMode ? '取消批量选择' : '批量选择'}
           </button>
         )}
       </div>
-      {selectedBatch.size > 0 && (
+      {batchMode && (
         <div style={{ padding: '12px 16px', backgroundColor: '#EFF6FF', borderBottom: '1px solid #D1E0FF', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>已选择 {selectedBatch.size} 道食谱</span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select
-              className="input"
-              style={{ width: 'auto', padding: '8px 12px', fontSize: 14 }}
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  bulkMoveTo(e.target.value);
-                  e.target.value = '';
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <span>已选择 {selectedBatch.size} 道食谱</span>
+            <button
+              className="btn ghost"
+              style={{ padding: '4px 8px', fontSize: 12 }}
+              onClick={() => {
+                if (selectedBatch.size === filtered.length && selectedBatch.size > 0) {
+                  setSelectedBatch(new Set());
+                } else {
+                  setSelectedBatch(new Set(filtered.map(r => r.id)));
                 }
               }}
             >
-              <option value="">移到...</option>
-              {folders.filter(f => f.id !== activeFolder).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setSelectedBatch(new Set())}>取消选择</button>
+              {selectedBatch.size === filtered.length && selectedBatch.size > 0 ? '取消全选' : '全选'}
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {selectedBatch.size > 0 && (
+              <select
+                className="input"
+                style={{ width: 'auto', padding: '8px 12px', fontSize: 14 }}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    bulkMoveTo(e.target.value);
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="">移到...</option>
+                {folders.filter(f => f.id !== activeFolder).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            )}
+            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setSelectedBatch(new Set()); setBatchMode(false); }}>关闭</button>
           </div>
         </div>
       )}
@@ -1445,9 +1466,9 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
             <div
               key={r.id}
               className={`card ${selectedBatch.has(r.id) ? 'selected' : ''}`}
-              style={{ position: 'relative', cursor: selectedBatch.size > 0 ? 'pointer' : 'default' }}
+              style={{ position: 'relative', cursor: batchMode ? 'pointer' : 'default' }}
               onClick={() => {
-                if (selectedBatch.size > 0) {
+                if (batchMode) {
                   const newSet = new Set(selectedBatch);
                   if (newSet.has(r.id)) newSet.delete(r.id);
                   else newSet.add(r.id);
@@ -1457,7 +1478,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
                 }
               }}
             >
-              {selectedBatch.size > 0 && (
+              {batchMode && (
                 <input
                   type="checkbox"
                   checked={selectedBatch.has(r.id)}
