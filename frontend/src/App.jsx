@@ -1,10 +1,54 @@
 import { useState, useEffect } from 'react';
-import { apiUrl } from './api';
+import { authFetch } from './api';
+import { supabase } from './supabase';
 
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
+function Login() {
+  const signIn = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+  };
+  return (
+    <div className="app">
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 24, padding: 32, textAlign: 'center'
+      }}>
+        <h1 className="serif" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>小红书食谱</h1>
+        <p style={{ color: 'var(--ink-soft)', maxWidth: 360, lineHeight: 1.6 }}>
+          把你收藏的小红书帖子,一键变成结构化食谱。登录后开始建立你自己的食谱库。
+        </p>
+        <button className="btn" onClick={signIn} style={{ padding: '14px 24px' }}>
+          使用 Google 登录
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (authLoading) return <div className="app"><p className="empty">加载中…</p></div>;
+  if (!session) return <Login />;
+  return <Main session={session} />;
+}
+
+function Main({ session }) {
   const [tab, setTab] = useState('extract');
   const [recipes, setRecipes] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -12,7 +56,7 @@ export default function App() {
   const loadList = async () => {
     setLoadingList(true);
     try {
-      const res = await fetch(apiUrl('/api/recipes'));
+      const res = await authFetch('/api/recipes');
       const data = await res.json();
       setRecipes(data.recipes || []);
     } finally { setLoadingList(false); }
@@ -21,13 +65,18 @@ export default function App() {
   useEffect(() => { loadList(); }, []);
 
   const onExtracted = () => { loadList(); setTimeout(() => setTab('library'), 600); };
+  const signOut = () => supabase.auth.signOut();
+  const userName = session.user.user_metadata?.name || session.user.email;
 
   return (
     <div className="app">
       <header className="header">
         <div className="brand">
           <h1>小红书食谱</h1>
-          <span className="count">{recipes.length} 道收藏</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className="count">{userName} · {recipes.length} 道</span>
+            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={signOut}>退出</button>
+          </div>
         </div>
         <div className="tabs">
           <button className={`tab ${tab === 'extract' ? 'active' : ''}`} onClick={() => setTab('extract')}>提取</button>
@@ -65,7 +114,7 @@ function Extract({ onExtracted }) {
     if (!target) return;
     setLoading(true); setError(null); setStatus(null); setClipHint('');
     try {
-      const res = await fetch(apiUrl('/api/recipe/from-link'), {
+      const res = await authFetch('/api/recipe/from-link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: target }),
       });
@@ -160,14 +209,14 @@ function Library({ recipes, loading, reload }) {
   });
 
   const open = async (id) => {
-    const res = await fetch(apiUrl(`/api/recipes/${id}`));
+    const res = await authFetch(`/api/recipes/${id}`);
     const data = await res.json();
     setSelected(data.recipe);
   };
 
   const remove = async (id) => {
     if (!confirm('确定删除这条食谱？')) return;
-    await fetch(apiUrl(`/api/recipes/${id}`), { method: 'DELETE' });
+    await authFetch(`/api/recipes/${id}`, { method: 'DELETE' });
     if (selected?.id === id) setSelected(null);
     reload();
   };

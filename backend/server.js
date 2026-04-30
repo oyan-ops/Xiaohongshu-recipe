@@ -3,7 +3,10 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
-import { insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource } from './lib/db.js';
+import {
+  clientForUser,
+  insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource,
+} from './lib/db.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -60,14 +63,32 @@ async function fetchImageBlock(url) {
   } catch (_) { return null; }
 }
 
-app.post('/api/recipe/from-link', async (req, res) => {
+// Auth middleware: require Bearer token, attach { client, userId } to req.
+async function requireAuth(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ error: '未登录' });
+  try {
+    const client = clientForUser(token);
+    const { data, error } = await client.auth.getUser(token);
+    if (error || !data?.user) return res.status(401).json({ error: '登录已过期，请重新登录' });
+    req.userId = data.user.id;
+    req.userEmail = data.user.email;
+    req.client = client;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: '认证失败：' + e.message });
+  }
+}
+
+app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
   const url = (req.body?.url || '').trim();
   if (!url) return res.status(400).json({ error: '缺少链接' });
 
   try {
     const post = await fetchXhsPost(url);
 
-    const existing = await findRecipesBySource(post.sourceUrl, post.noteId);
+    const existing = await findRecipesBySource(req.client, post.sourceUrl, post.noteId);
     if (existing.length > 0) {
       return res.json({ success: true, recipes: existing, count: existing.length, duplicate: true });
     }
@@ -100,7 +121,7 @@ app.post('/api/recipe/from-link', async (req, res) => {
     for (const r of recipes) {
       const idx = Number.isInteger(r.imageIndex) ? r.imageIndex : 0;
       const dishImage = imageUrls[idx] || post.coverImage || null;
-      const row = await insertRecipe({
+      const row = await insertRecipe(req.client, req.userId, {
         ...r,
         sourceUrl: post.sourceUrl,
         videoUrl: post.videoUrl,
@@ -117,17 +138,17 @@ app.post('/api/recipe/from-link', async (req, res) => {
   }
 });
 
-app.get('/api/recipes', async (_req, res) => {
+app.get('/api/recipes', requireAuth, async (req, res) => {
   try {
-    res.json({ recipes: await listRecipes() });
+    res.json({ recipes: await listRecipes(req.client) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/recipes/:id', async (req, res) => {
+app.get('/api/recipes/:id', requireAuth, async (req, res) => {
   try {
-    const recipe = await getRecipe(req.params.id);
+    const recipe = await getRecipe(req.client, req.params.id);
     if (!recipe) return res.status(404).json({ error: '未找到' });
     res.json({ recipe });
   } catch (err) {
@@ -135,14 +156,18 @@ app.get('/api/recipes/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/recipes/:id', async (req, res) => {
+app.delete('/api/recipes/:id', requireAuth, async (req, res) => {
   try {
-    const ok = await deleteRecipe(req.params.id);
+    const ok = await deleteRecipe(req.client, req.params.id);
     if (!ok) return res.status(404).json({ error: '未找到' });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({ id: req.userId, email: req.userEmail });
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

@@ -1,12 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SECRET_KEY,
-  { auth: { persistSession: false } }
-);
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SECRET_KEY;
 
-const toRow = (recipe) => ({
+// Per-request client scoped to the user's JWT — RLS filters everything by auth.uid().
+export function clientForUser(accessToken) {
+  return createClient(SUPABASE_URL, SERVICE_KEY, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+const toRow = (recipe, userId) => ({
+  user_id: userId,
   title: recipe.title || null,
   description: recipe.description || null,
   servings: recipe.servings || null,
@@ -40,23 +46,19 @@ const fromRow = (row) => ({
   extractedAt: row.extracted_at,
 });
 
-export async function insertRecipe(recipe) {
-  const { data, error } = await supabase
-    .from('recipes')
-    .insert(toRow(recipe))
-    .select()
-    .single();
+export async function insertRecipe(client, userId, recipe) {
+  const { data, error } = await client.from('recipes').insert(toRow(recipe, userId)).select().single();
   if (error) throw new Error('保存失败：' + error.message);
   return fromRow(data);
 }
 
-export async function listRecipes() {
-  const { data, error } = await supabase
+export async function listRecipes(client) {
+  const { data, error } = await client
     .from('recipes')
     .select('id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
     .order('extracted_at', { ascending: false });
   if (error) throw new Error('读取失败：' + error.message);
-  return data.map((r) => ({
+  return (data || []).map((r) => ({
     id: r.id,
     title: r.title,
     description: r.description,
@@ -70,35 +72,28 @@ export async function listRecipes() {
   }));
 }
 
-export async function getRecipe(id) {
-  const { data, error } = await supabase
-    .from('recipes')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
+export async function getRecipe(client, id) {
+  const { data, error } = await client.from('recipes').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error('读取失败：' + error.message);
   return data ? fromRow(data) : null;
 }
 
-export async function findRecipesBySource(sourceUrl, noteId) {
+export async function deleteRecipe(client, id) {
+  const { error, count } = await client.from('recipes').delete({ count: 'exact' }).eq('id', id);
+  if (error) throw new Error('删除失败：' + error.message);
+  return count > 0;
+}
+
+export async function findRecipesBySource(client, sourceUrl, noteId) {
   const ors = [];
   if (sourceUrl) ors.push(`source_url.eq.${sourceUrl}`);
   if (noteId) ors.push(`source_url.ilike.%${noteId}%`);
   if (ors.length === 0) return [];
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('recipes')
     .select('*')
     .or(ors.join(','))
     .order('extracted_at', { ascending: false });
   if (error) throw new Error('查重失败：' + error.message);
   return (data || []).map(fromRow);
-}
-
-export async function deleteRecipe(id) {
-  const { error, count } = await supabase
-    .from('recipes')
-    .delete({ count: 'exact' })
-    .eq('id', id);
-  if (error) throw new Error('删除失败：' + error.message);
-  return count > 0;
 }
