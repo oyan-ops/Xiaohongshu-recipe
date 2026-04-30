@@ -741,11 +741,13 @@ function PlanView({ cart, mode }) {
         <RecipePickerModal
           date={showPicker}
           onClose={() => setShowPicker(null)}
-          onPicked={async (recipeId) => {
-            await authFetch('/api/plans', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipeId, date: showPicker }),
-            });
+          onConfirm={async (recipeIds) => {
+            for (const recipeId of recipeIds) {
+              await authFetch('/api/plans', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, date: showPicker }),
+              });
+            }
             setShowPicker(null);
             load();
           }}
@@ -755,10 +757,11 @@ function PlanView({ cart, mode }) {
   );
 }
 
-function RecipePickerModal({ date, onClose, onPicked }) {
+function RecipePickerModal({ date, onClose, onConfirm }) {
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
     authFetch('/api/recipes')
@@ -767,6 +770,18 @@ function RecipePickerModal({ date, onClose, onPicked }) {
   }, []);
 
   const filtered = recipes.filter(r => !q || (r.title || '').toLowerCase().includes(q.toLowerCase()));
+
+  const toggle = (recipeId) => {
+    const newSet = new Set(selected);
+    if (newSet.has(recipeId)) newSet.delete(recipeId);
+    else newSet.add(recipeId);
+    setSelected(newSet);
+  };
+
+  const handleConfirm = async () => {
+    if (selected.size === 0) return;
+    await onConfirm(Array.from(selected));
+  };
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
@@ -780,15 +795,30 @@ function RecipePickerModal({ date, onClose, onPicked }) {
           {loading ? <p className="empty">加载中…</p> : (
             <div className="ing-list">
               {filtered.map(r => (
-                <div key={r.id} className="ing" onClick={() => onPicked(r.id)} style={{ cursor: 'pointer' }}>
+                <div
+                  key={r.id}
+                  className={`ing ${selected.has(r.id) ? 'selected' : ''}`}
+                  onClick={() => toggle(r.id)}
+                  style={{ cursor: 'pointer', backgroundColor: selected.has(r.id) ? '#E6F4FF' : '' }}
+                >
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
                     {r.coverImage && <img src={r.coverImage} alt="" referrerPolicy="no-referrer" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
                     <span className="name">{r.title || '未命名'}</span>
                   </div>
-                  <span className="amount">+</span>
+                  <span className="amount">{selected.has(r.id) ? '✓' : '+'}</span>
                 </div>
               ))}
               {filtered.length === 0 && <p className="empty">没有匹配的食谱</p>}
+            </div>
+          )}
+          {selected.size > 0 && (
+            <div style={{ padding: '16px 0', borderTop: '1px solid var(--line)', marginTop: 16, display: 'flex', gap: 8 }}>
+              <button className="btn coral" style={{ flex: 1 }} onClick={handleConfirm}>
+                添加 {selected.size} 道菜
+              </button>
+              <button className="btn ghost" onClick={onClose}>
+                取消
+              </button>
             </div>
           )}
         </div>
