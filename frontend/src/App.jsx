@@ -106,12 +106,29 @@ function InvitePage({ token, session }) {
   );
 }
 
+function useCart() {
+  const [ids, setIds] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cart') || '[]'); } catch { return []; }
+  });
+  useEffect(() => { localStorage.setItem('cart', JSON.stringify(ids)); }, [ids]);
+  return {
+    ids,
+    count: ids.length,
+    has: (id) => ids.includes(id),
+    toggle: (id) => setIds((p) => p.includes(id) ? p.filter(x => x !== id) : [...p, id]),
+    remove: (id) => setIds((p) => p.filter(x => x !== id)),
+    clear: () => setIds([]),
+  };
+}
+
 function Main({ session }) {
   const [tab, setTab] = useState('extract');
   const [recipes, setRecipes] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [folders, setFolders] = useState([]);
   const [activeFolder, setActiveFolder] = useState(() => localStorage.getItem('activeFolder') || null);
+  const [cartOpen, setCartOpen] = useState(false);
+  const cart = useCart();
 
   const loadFolders = async () => {
     const res = await authFetch('/api/folders');
@@ -183,10 +200,164 @@ function Main({ session }) {
                 folders={folders}
                 activeFolder={activeFolder}
                 session={session}
+                cart={cart}
               />
             </div>
         }
       </main>
+
+      {cart.count > 0 && (
+        <button className="cart-fab" onClick={() => setCartOpen(true)}>
+          🧺 菜单 <span className="cart-count">{cart.count}</span>
+        </button>
+      )}
+      {cartOpen && <CartDrawer cart={cart} onClose={() => setCartOpen(false)} />}
+    </div>
+  );
+}
+
+function CartDrawer({ cart, onClose }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('list');
+  const [checked, setChecked] = useState({});
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all(cart.ids.map(id => authFetch(`/api/recipes/${id}`).then(r => r.json()).then(d => d.recipe).catch(() => null)))
+      .then(rs => { if (!cancelled) { setItems(rs.filter(Boolean)); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [cart.ids.join(',')]);
+
+  const grouped = (() => {
+    const map = new Map();
+    for (const r of items) {
+      for (const ing of r.ingredients || []) {
+        const key = (ing.name || '').trim();
+        if (!key) continue;
+        if (!map.has(key)) map.set(key, { name: key, parts: [] });
+        map.get(key).parts.push({ amount: ing.amount, notes: ing.notes, from: r.title });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  })();
+
+  const formatPart = (p) => {
+    let s = p.amount || '';
+    if (p.notes) s += s ? `（${p.notes}）` : `（${p.notes}）`;
+    return `${s} - ${p.from}`;
+  };
+
+  const buildText = () => {
+    const lines = [];
+    lines.push('今日菜单');
+    lines.push('━━━━━━━━━━');
+    for (const r of items) lines.push(`· ${r.title || '未命名'}`);
+    lines.push('');
+    lines.push('食材清单');
+    lines.push('━━━━━━━━━━');
+    for (const g of grouped) {
+      if (g.parts.length === 1) {
+        const p = g.parts[0];
+        lines.push(`☐ ${g.name}${p.amount ? ' — ' + p.amount : ''}${p.notes ? '（' + p.notes + '）' : ''}`);
+      } else {
+        lines.push(`☐ ${g.name}`);
+        for (const p of g.parts) lines.push(`   · ${p.amount || '适量'}${p.notes ? '（' + p.notes + '）' : ''} — ${p.from}`);
+      }
+    }
+    return lines.join('\n');
+  };
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  };
+
+  const download = () => {
+    const blob = new Blob([buildText()], { type: 'text/plain;charset=utf-8' });
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = u; a.download = `菜单-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
+    URL.revokeObjectURL(u);
+  };
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" style={{ maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+        <div className="sheet-head">
+          <button className="sheet-close" onClick={onClose}>✕</button>
+          <h2>{view === 'list' ? '今日菜单' : '食材清单'}</h2>
+          <p className="desc">
+            {view === 'list'
+              ? `已选 ${items.length} 道菜,合计食材会自动合并。`
+              : `${grouped.length} 种食材,逛超市时勾选已购。`}
+          </p>
+        </div>
+
+        <div className="sheet-body">
+          {loading ? (
+            <p className="empty">加载中…</p>
+          ) : view === 'list' ? (
+            <>
+              <div className="block">
+                <div className="ing-list">
+                  {items.length === 0 && <p className="empty" style={{ padding: '20px 0' }}>菜单为空</p>}
+                  {items.map((r) => (
+                    <div key={r.id} className="ing">
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        {r.coverImage && (
+                          <img src={r.coverImage} alt="" referrerPolicy="no-referrer"
+                            style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                        )}
+                        <span className="name">{r.title || '未命名'}</span>
+                      </div>
+                      <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => cart.remove(r.id)}>
+                        移除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="actions">
+                <button className="btn coral" onClick={() => setView('groceries')} disabled={items.length === 0}>
+                  查看食材清单 →
+                </button>
+                <button className="btn ghost" onClick={() => { cart.clear(); onClose(); }} disabled={items.length === 0}>
+                  清空菜单
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="block">
+                <div className="ing-list">
+                  {grouped.map((g) => (
+                    <div key={g.name} className="ing" onClick={() => setChecked(c => ({ ...c, [g.name]: !c[g.name] }))} style={{ cursor: 'pointer' }}>
+                      <div style={{ flex: 1 }}>
+                        <span className="name" style={{ textDecoration: checked[g.name] ? 'line-through' : 'none', opacity: checked[g.name] ? 0.5 : 1 }}>
+                          <span style={{ marginRight: 10 }}>{checked[g.name] ? '☑' : '☐'}</span>
+                          {g.name}
+                        </span>
+                        <span className="notes">
+                          {g.parts.length === 1
+                            ? `${g.parts[0].amount || '适量'}${g.parts[0].notes ? '（' + g.parts[0].notes + '）' : ''}`
+                            : g.parts.map(p => `${p.amount || '适量'} (${p.from})`).join(' + ')}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="actions">
+                <button className="btn coral" onClick={copy}>{copied ? '已复制 ✓' : '复制为文字'}</button>
+                <button className="btn ghost" onClick={download}>下载 .txt</button>
+                <button className="btn ghost" onClick={() => setView('list')}>← 返回菜单</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -477,7 +648,7 @@ function Extract({ folders, activeFolder, onExtracted }) {
   );
 }
 
-function Library({ recipes, loading, reload, folders, activeFolder, session }) {
+function Library({ recipes, loading, reload, folders, activeFolder, session, cart }) {
   const [selected, setSelected] = useState(null);
   const [q, setQ] = useState('');
   const [userMap, setUserMap] = useState({});
@@ -560,6 +731,14 @@ function Library({ recipes, loading, reload, folders, activeFolder, session }) {
               {r.coverImage
                 ? <img className="card-img" src={r.coverImage} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 : <div className="card-img placeholder" />}
+              {cart && (
+                <button
+                  className={`card-cart ${cart.has(r.id) ? 'in' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); cart.toggle(r.id); }}
+                >
+                  {cart.has(r.id) ? '✓ 已加入' : '+ 加入菜单'}
+                </button>
+              )}
               <div className="card-body">
                 <div className="card-title">{r.title || '未命名'}</div>
                 {r.description && <div className="card-desc">{r.description}</div>}
