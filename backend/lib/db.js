@@ -32,6 +32,7 @@ const toRow = (recipe, userId) => ({
 const fromRow = (row) => ({
   id: row.id,
   folderId: row.folder_id,
+  userId: row.user_id,
   title: row.title,
   description: row.description,
   servings: row.servings,
@@ -57,7 +58,7 @@ export async function insertRecipe(client, userId, recipe) {
 export async function listRecipes(client, folderId) {
   let q = client
     .from('recipes')
-    .select('id,folder_id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
+    .select('id,folder_id,user_id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
     .order('extracted_at', { ascending: false });
   if (folderId) q = q.eq('folder_id', folderId);
   const { data, error } = await q;
@@ -65,6 +66,7 @@ export async function listRecipes(client, folderId) {
   return (data || []).map((r) => ({
     id: r.id,
     folderId: r.folder_id,
+    userId: r.user_id,
     title: r.title,
     description: r.description,
     tags: r.tags || [],
@@ -75,6 +77,61 @@ export async function listRecipes(client, folderId) {
     servings: r.servings,
     extractedAt: r.extracted_at,
   }));
+}
+
+export async function getFolderMembers(adminCli, folderId) {
+  const { data: folder, error: fErr } = await adminCli
+    .from('folders')
+    .select('id, name, owner_id')
+    .eq('id', folderId)
+    .maybeSingle();
+  if (fErr || !folder) throw new Error('文件夹不存在');
+  const { data: members, error: mErr } = await adminCli
+    .from('folder_members')
+    .select('user_id, role, joined_at')
+    .eq('folder_id', folderId);
+  if (mErr) throw new Error('读取成员失败：' + mErr.message);
+  const userIds = Array.from(new Set([folder.owner_id, ...(members || []).map((m) => m.user_id)]));
+  const profiles = await getUserProfiles(adminCli, userIds);
+  const byId = (id) => profiles[id] || { email: null, name: null };
+  return {
+    folder: { id: folder.id, name: folder.name, ownerId: folder.owner_id },
+    owner: { userId: folder.owner_id, ...byId(folder.owner_id) },
+    members: (members || []).map((m) => ({
+      userId: m.user_id,
+      role: m.role,
+      joinedAt: m.joined_at,
+      ...byId(m.user_id),
+    })),
+  };
+}
+
+export async function getUserProfiles(adminCli, userIds) {
+  if (!userIds || userIds.length === 0) return {};
+  const out = {};
+  for (const id of userIds) {
+    if (!id) continue;
+    try {
+      const { data, error } = await adminCli.auth.admin.getUserById(id);
+      if (!error && data?.user) {
+        out[id] = {
+          email: data.user.email || null,
+          name: data.user.user_metadata?.name || data.user.user_metadata?.full_name || null,
+        };
+      }
+    } catch (_) { /* skip */ }
+  }
+  return out;
+}
+
+export async function removeFolderMember(adminCli, folderId, userId) {
+  const { error, count } = await adminCli
+    .from('folder_members')
+    .delete({ count: 'exact' })
+    .eq('folder_id', folderId)
+    .eq('user_id', userId);
+  if (error) throw new Error('移除失败：' + error.message);
+  return count > 0;
 }
 
 export async function listFolders(client, userId) {

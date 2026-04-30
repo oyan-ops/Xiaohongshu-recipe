@@ -182,6 +182,7 @@ function Main({ session }) {
                 reload={loadList}
                 folders={folders}
                 activeFolder={activeFolder}
+                session={session}
               />
             </div>
         }
@@ -258,6 +259,20 @@ function ShareModal({ folder, onClose }) {
   const [link, setLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [members, setMembers] = useState(null);
+
+  const loadMembers = async () => {
+    const res = await authFetch(`/api/folders/${folder.id}/members`);
+    if (res.ok) setMembers(await res.json());
+  };
+
+  useEffect(() => { loadMembers(); }, [folder.id]);
+
+  const removeMember = async (userId) => {
+    if (!confirm('确认移除该成员?')) return;
+    await authFetch(`/api/folders/${folder.id}/members/${userId}`, { method: 'DELETE' });
+    loadMembers();
+  };
 
   const generate = async () => {
     setLoading(true);
@@ -275,6 +290,8 @@ function ShareModal({ folder, onClose }) {
     try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   };
 
+  const displayName = (u) => u?.name || u?.email || u?.userId?.slice(0, 8);
+
   return (
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
@@ -284,8 +301,36 @@ function ShareModal({ folder, onClose }) {
           <p className="desc">生成一个邀请链接,谁拿到链接谁就能加入这个文件夹。</p>
         </div>
         <div className="sheet-body">
+          {members && (
+            <div className="block">
+              <h3>成员 ({1 + members.members.length})</h3>
+              <div className="ing-list">
+                <div className="ing">
+                  <div>
+                    <span className="name">{displayName(members.owner)}</span>
+                    <span className="notes">拥有者</span>
+                  </div>
+                </div>
+                {members.members.map((m) => (
+                  <div key={m.userId} className="ing">
+                    <div>
+                      <span className="name">{displayName(m)}</span>
+                      <span className="notes">{m.role === 'editor' ? '可编辑' : '只读'}</span>
+                    </div>
+                    <button className="btn danger" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => removeMember(m.userId)}>
+                      移除
+                    </button>
+                  </div>
+                ))}
+                {members.members.length === 0 && (
+                  <p className="empty" style={{ padding: '12px 0', textAlign: 'left' }}>暂无成员,生成下方链接邀请。</p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="field">
-            <label>权限</label>
+            <label>新邀请权限</label>
             <select className="input" value={role} onChange={e => setRole(e.target.value)}>
               <option value="editor">可编辑(增删食谱)</option>
               <option value="viewer">只读</option>
@@ -432,9 +477,33 @@ function Extract({ folders, activeFolder, onExtracted }) {
   );
 }
 
-function Library({ recipes, loading, reload, folders, activeFolder }) {
+function Library({ recipes, loading, reload, folders, activeFolder, session }) {
   const [selected, setSelected] = useState(null);
   const [q, setQ] = useState('');
+  const [userMap, setUserMap] = useState({});
+
+  const currentFolder = (folders || []).find((f) => f.id === activeFolder);
+  const isShared = currentFolder && (!currentFolder.isOwner || currentFolder.memberCount > 0);
+
+  useEffect(() => {
+    if (!isShared) return;
+    const ids = Array.from(new Set(recipes.map((r) => r.userId).filter(Boolean)));
+    const missing = ids.filter((id) => !userMap[id]);
+    if (missing.length === 0) return;
+    authFetch('/api/users/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: missing }),
+    })
+      .then((r) => r.json())
+      .then((d) => setUserMap((prev) => ({ ...prev, ...(d.users || {}) })));
+  }, [recipes, isShared]);
+
+  const labelFor = (userId) => {
+    if (!userId || userId === session?.user?.id) return null;
+    const u = userMap[userId];
+    return u?.name || u?.email?.split('@')[0] || null;
+  };
 
   const moveTo = async (recipeId, folderId) => {
     await authFetch(`/api/recipes/${recipeId}/folder`, {
@@ -499,6 +568,11 @@ function Library({ recipes, loading, reload, folders, activeFolder }) {
                   {r.cookTime && <><span className="dot">·</span><span>烹饪 {r.cookTime}</span></>}
                   {r.servings && <><span className="dot">·</span><span>{r.servings}</span></>}
                 </div>
+                {labelFor(r.userId) && (
+                  <div className="card-meta" style={{ paddingTop: 0 }}>
+                    <span>{labelFor(r.userId)} 添加</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -509,6 +583,7 @@ function Library({ recipes, loading, reload, folders, activeFolder }) {
         <RecipeDetail
           recipe={selected}
           folders={folders}
+          addedBy={labelFor(selected.userId)}
           onClose={() => setSelected(null)}
           onDelete={() => remove(selected.id)}
           onMove={(folderId) => moveTo(selected.id, folderId)}
@@ -518,7 +593,7 @@ function Library({ recipes, loading, reload, folders, activeFolder }) {
   );
 }
 
-function RecipeDetail({ recipe, folders, onClose, onDelete, onMove }) {
+function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
   const otherFolders = (folders || []).filter(f => f.id !== recipe.folderId);
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
@@ -539,6 +614,7 @@ function RecipeDetail({ recipe, folders, onClose, onDelete, onMove }) {
           <h2>{recipe.title || '未命名'}</h2>
           {recipe.description && <p className="desc">{recipe.description}</p>}
           {recipe.author && <p className="author">— {recipe.author}</p>}
+          {addedBy && <p className="author" style={{ marginTop: 4 }}>由 {addedBy} 添加</p>}
         </div>
 
         <div className="sheet-body">

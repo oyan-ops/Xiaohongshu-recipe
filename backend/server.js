@@ -8,6 +8,7 @@ import {
   insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource,
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
+  getFolderMembers, removeFolderMember, getUserProfiles,
 } from './lib/db.js';
 
 const app = express();
@@ -163,6 +164,46 @@ app.get('/api/folders', requireAuth, async (req, res) => {
       folders = [def];
     }
     res.json({ folders });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/folders/:id/members', requireAuth, async (req, res) => {
+  try {
+    // Verify caller can access this folder (RLS-scoped client check).
+    const { data: f } = await req.client.from('folders').select('id').eq('id', req.params.id).maybeSingle();
+    if (!f) return res.status(404).json({ error: '未找到或无权限' });
+    const result = await getFolderMembers(adminClient(), req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/folders/:id/members/:userId', requireAuth, async (req, res) => {
+  try {
+    // Only the owner may remove members.
+    const { data: f } = await req.client
+      .from('folders')
+      .select('owner_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!f || f.owner_id !== req.userId) return res.status(403).json({ error: '只有文件夹拥有者可以移除成员' });
+    const ok = await removeFolderMember(adminClient(), req.params.id, req.params.userId);
+    if (!ok) return res.status(404).json({ error: '该成员不存在' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/users/lookup', requireAuth, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(Boolean) : [];
+    if (ids.length === 0) return res.json({ users: {} });
+    const users = await getUserProfiles(adminClient(), ids);
+    res.json({ users });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
