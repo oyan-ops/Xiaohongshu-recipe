@@ -325,6 +325,66 @@ main { padding: 32px 0 64px; }
 @media (max-width: 640px) {
   .cart-fab { bottom: calc(20px + env(safe-area-inset-bottom)); right: 16px; padding: 12px 18px; }
 }
+
+.plan-day {
+  background: var(--cream-card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.plan-day.today {
+  border-color: var(--coral);
+  box-shadow: 0 0 0 3px var(--coral-soft);
+}
+.plan-day-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+.plan-day-head h3 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.plan-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--cream);
+}
+.plan-card img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.plan-card-body { flex: 1; min-width: 0; }
+.plan-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-card-meta {
+  font-size: 12px;
+  color: var(--ink-mute);
+  margin-top: 2px;
+}
 .card-body {
   padding: 16px 18px 18px;
   display: flex;

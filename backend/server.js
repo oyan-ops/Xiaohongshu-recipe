@@ -9,6 +9,7 @@ import {
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
+  listPlans, createPlan, deletePlan,
 } from './lib/db.js';
 
 const app = express();
@@ -296,6 +297,36 @@ app.get('/api/recipes/:id', requireAuth, async (req, res) => {
 app.delete('/api/recipes/:id', requireAuth, async (req, res) => {
   try {
     const ok = await deleteRecipe(req.client, req.params.id);
+    if (!ok) return res.status(404).json({ error: '未找到' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plans', requireAuth, async (req, res) => {
+  try {
+    res.json({ plans: await listPlans(req.client, req.query.from || null, req.query.to || null) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/plans', requireAuth, async (req, res) => {
+  const recipeId = req.body?.recipeId;
+  const date = req.body?.date;
+  if (!recipeId || !date) return res.status(400).json({ error: '缺少 recipeId 或 date' });
+  try {
+    const plan = await createPlan(req.client, req.userId, recipeId, date);
+    res.json({ plan, duplicate: !plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/plans/:id', requireAuth, async (req, res) => {
+  try {
+    const ok = await deletePlan(req.client, req.params.id);
     if (!ok) return res.status(404).json({ error: '未找到' });
     res.json({ success: true });
   } catch (err) {

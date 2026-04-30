@@ -174,36 +174,44 @@ function Main({ session }) {
         <div className="tabs">
           <button className={`tab ${tab === 'extract' ? 'active' : ''}`} onClick={() => setTab('extract')}>提取</button>
           <button className={`tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>我的食谱</button>
+          <button className={`tab ${tab === 'plan' ? 'active' : ''}`} onClick={() => setTab('plan')}>计划</button>
         </div>
       </header>
 
       <main>
-        {tab === 'extract'
-          ? <div className="slide-up">
-              <div className="section-head">
-                <h2>提取一道食谱</h2>
-                <p>粘贴小红书帖子链接，或整段分享文字。</p>
-              </div>
-              <Extract folders={folders} activeFolder={activeFolder} onExtracted={onExtracted} />
+        {tab === 'extract' && (
+          <div className="slide-up">
+            <div className="section-head">
+              <h2>提取一道食谱</h2>
+              <p>粘贴小红书帖子链接，或整段分享文字。</p>
             </div>
-          : <div className="slide-up">
-              <FolderBar
-                folders={folders}
-                active={activeFolder}
-                setActive={setActiveFolder}
-                reload={loadFolders}
-              />
-              <Library
-                recipes={recipes}
-                loading={loadingList}
-                reload={loadList}
-                folders={folders}
-                activeFolder={activeFolder}
-                session={session}
-                cart={cart}
-              />
-            </div>
-        }
+            <Extract folders={folders} activeFolder={activeFolder} onExtracted={onExtracted} />
+          </div>
+        )}
+        {tab === 'library' && (
+          <div className="slide-up">
+            <FolderBar
+              folders={folders}
+              active={activeFolder}
+              setActive={setActiveFolder}
+              reload={loadFolders}
+            />
+            <Library
+              recipes={recipes}
+              loading={loadingList}
+              reload={loadList}
+              folders={folders}
+              activeFolder={activeFolder}
+              session={session}
+              cart={cart}
+            />
+          </div>
+        )}
+        {tab === 'plan' && (
+          <div className="slide-up">
+            <PlanView cart={cart} />
+          </div>
+        )}
       </main>
 
       {cart.count > 0 && (
@@ -356,6 +364,180 @@ function CartDrawer({ cart, onClose }) {
                 <button className="btn ghost" onClick={() => setView('list')}>← 返回菜单</button>
               </div>
             </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const formatDateLabel = (iso) => {
+  const today = todayISO();
+  const d = new Date(iso + 'T00:00:00');
+  const t = new Date(today + 'T00:00:00');
+  const diff = Math.round((d - t) / 86400000);
+  const wd = ['周日','周一','周二','周三','周四','周五','周六'][d.getDay()];
+  let label;
+  if (diff === 0) label = '今天';
+  else if (diff === 1) label = '明天';
+  else if (diff === -1) label = '昨天';
+  else if (diff > 1 && diff < 7) label = `${diff} 天后`;
+  else label = `${d.getMonth() + 1}月${d.getDate()}日`;
+  return `${label} · ${wd}`;
+};
+
+function PlanView({ cart }) {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showPicker, setShowPicker] = useState(null); // date string
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const from = todayISO();
+      const to = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+      const res = await authFetch(`/api/plans?from=${from}&to=${to}`);
+      const data = await res.json();
+      setPlans(data.plans || []);
+    } finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const remove = async (planId) => {
+    await authFetch(`/api/plans/${planId}`, { method: 'DELETE' });
+    load();
+  };
+
+  const addAllToCart = (recipeIds) => {
+    for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
+  };
+
+  // group plans by date
+  const byDate = new Map();
+  for (const p of plans) {
+    if (!byDate.has(p.date)) byDate.set(p.date, []);
+    byDate.get(p.date).push(p);
+  }
+
+  // ensure today + next 6 days are in the list (even if empty)
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() + i * 86400000).toISOString().slice(0, 10);
+    days.push(d);
+  }
+  for (const d of byDate.keys()) if (!days.includes(d)) days.push(d);
+  days.sort();
+
+  if (loading) return <p className="empty">加载中…</p>;
+
+  return (
+    <div>
+      <div className="section-head">
+        <h2>本周做菜计划</h2>
+        <p>规划每天要做的菜,可以一键加入菜单去买菜。</p>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        {days.map((d) => {
+          const today = d === todayISO();
+          const list = byDate.get(d) || [];
+          return (
+            <div key={d} className={`plan-day ${today ? 'today' : ''}`}>
+              <div className="plan-day-head">
+                <h3>{formatDateLabel(d)}</h3>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {list.length > 0 && (
+                    <button
+                      className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                      onClick={() => addAllToCart(list.map(p => p.recipeId))}
+                    >全部加入菜单</button>
+                  )}
+                  <button
+                    className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
+                    onClick={() => setShowPicker(d)}
+                  >+ 加菜</button>
+                </div>
+              </div>
+              {list.length === 0
+                ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>这一天还没安排</p>
+                : (
+                  <div className="plan-cards">
+                    {list.map((p) => (
+                      <div key={p.id} className="plan-card">
+                        {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
+                        <div className="plan-card-body">
+                          <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
+                          {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
+                        </div>
+                        <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                      </div>
+                    ))}
+                  </div>
+                )
+              }
+            </div>
+          );
+        })}
+      </div>
+
+      {showPicker && (
+        <RecipePickerModal
+          date={showPicker}
+          onClose={() => setShowPicker(null)}
+          onPicked={async (recipeId) => {
+            await authFetch('/api/plans', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId, date: showPicker }),
+            });
+            setShowPicker(null);
+            load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RecipePickerModal({ date, onClose, onPicked }) {
+  const [recipes, setRecipes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState('');
+
+  useEffect(() => {
+    authFetch('/api/recipes')
+      .then(r => r.json())
+      .then(d => { setRecipes(d.recipes || []); setLoading(false); });
+  }, []);
+
+  const filtered = recipes.filter(r => !q || (r.title || '').toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="sheet-head">
+          <button className="sheet-close" onClick={onClose}>✕</button>
+          <h2>添加菜到 {formatDateLabel(date)}</h2>
+        </div>
+        <div className="sheet-body">
+          <input className="input" placeholder="搜索食谱" value={q} onChange={e => setQ(e.target.value)} />
+          {loading ? <p className="empty">加载中…</p> : (
+            <div className="ing-list">
+              {filtered.map(r => (
+                <div key={r.id} className="ing" onClick={() => onPicked(r.id)} style={{ cursor: 'pointer' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
+                    {r.coverImage && <img src={r.coverImage} alt="" referrerPolicy="no-referrer" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
+                    <span className="name">{r.title || '未命名'}</span>
+                  </div>
+                  <span className="amount">+</span>
+                </div>
+              ))}
+              {filtered.length === 0 && <p className="empty">没有匹配的食谱</p>}
+            </div>
           )}
         </div>
       </div>
@@ -775,6 +957,18 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
 
 function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
   const otherFolders = (folders || []).filter(f => f.id !== recipe.folderId);
+  const [planDate, setPlanDate] = useState(todayISO());
+  const [planAdded, setPlanAdded] = useState(false);
+
+  const addToPlan = async () => {
+    const res = await authFetch('/api/plans', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipeId: recipe.id, date: planDate }),
+    });
+    const data = await res.json();
+    setPlanAdded(true);
+    setTimeout(() => setPlanAdded(false), 1500);
+  };
   const exportJSON = () => {
     const blob = new Blob([JSON.stringify(recipe, null, 2)], { type: 'application/json' });
     const u = URL.createObjectURL(blob);
@@ -854,6 +1048,22 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
               {recipe.tags.map(t => <span key={t} className="tag">{t}</span>)}
             </div>
           )}
+
+          <div className="block">
+            <h3>加入计划</h3>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="date"
+                className="input"
+                value={planDate}
+                onChange={(e) => setPlanDate(e.target.value)}
+                style={{ width: 'auto', flex: '0 1 200px' }}
+              />
+              <button className="btn coral" onClick={addToPlan}>
+                {planAdded ? '已加入 ✓' : '加入这天'}
+              </button>
+            </div>
+          </div>
 
           <div className="actions">
             {recipe.sourceUrl && <a className="btn ghost" href={recipe.sourceUrl} target="_blank" rel="noreferrer">原帖</a>}

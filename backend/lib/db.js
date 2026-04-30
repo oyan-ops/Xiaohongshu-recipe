@@ -262,6 +262,54 @@ export function adminClient() {
   return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 }
 
+export async function listPlans(client, fromDate, toDate) {
+  let q = client
+    .from('meal_plans')
+    .select('id, plan_date, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients)')
+    .order('plan_date', { ascending: true });
+  if (fromDate) q = q.gte('plan_date', fromDate);
+  if (toDate) q = q.lte('plan_date', toDate);
+  const { data, error } = await q;
+  if (error) throw new Error('读取计划失败：' + error.message);
+  return (data || []).map((p) => ({
+    id: p.id,
+    date: p.plan_date,
+    recipeId: p.recipe_id,
+    recipe: p.recipes ? {
+      id: p.recipes.id,
+      title: p.recipes.title,
+      description: p.recipes.description,
+      coverImage: p.recipes.cover_image,
+      prepTime: p.recipes.prep_time,
+      cookTime: p.recipes.cook_time,
+      servings: p.recipes.servings,
+      ingredients: p.recipes.ingredients || [],
+    } : null,
+  }));
+}
+
+export async function createPlan(client, userId, recipeId, date) {
+  const { data, error } = await client
+    .from('meal_plans')
+    .insert({ user_id: userId, recipe_id: recipeId, plan_date: date })
+    .select()
+    .single();
+  if (error) {
+    if (error.code === '23505') return null; // 已存在(unique 约束)
+    throw new Error('加入计划失败：' + error.message);
+  }
+  return { id: data.id, date: data.plan_date, recipeId: data.recipe_id };
+}
+
+export async function deletePlan(client, id) {
+  const { error, count } = await client
+    .from('meal_plans')
+    .delete({ count: 'exact' })
+    .eq('id', id);
+  if (error) throw new Error('删除计划失败：' + error.message);
+  return count > 0;
+}
+
 export async function getRecipe(client, id) {
   const { data, error } = await client.from('recipes').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error('读取失败：' + error.message);
