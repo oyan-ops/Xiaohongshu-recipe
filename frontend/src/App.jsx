@@ -250,9 +250,8 @@ function CartDrawer({ cart, onClose }) {
     return `${s} - ${p.from}`;
   };
 
-  const buildText = (style = 'pretty') => {
+  const buildText = () => {
     const lines = [];
-    const todoMark = style === 'todo' ? '- [ ] ' : '☐ ';
     lines.push('今日菜单');
     lines.push('━━━━━━━━━━');
     for (const r of items) lines.push(`· ${r.title || '未命名'}`);
@@ -262,10 +261,10 @@ function CartDrawer({ cart, onClose }) {
     for (const g of grouped) {
       if (g.parts.length === 1) {
         const p = g.parts[0];
-        lines.push(`${todoMark}${g.name}${p.amount ? ' — ' + p.amount : ''}${p.notes ? '（' + p.notes + '）' : ''}`);
+        lines.push(`${g.name}${p.amount ? ' — ' + p.amount : ''}${p.notes ? '（' + p.notes + '）' : ''}`);
       } else {
         const summary = g.parts.map(p => p.amount || '适量').join(' + ');
-        lines.push(`${todoMark}${g.name} — ${summary}`);
+        lines.push(`${g.name} — ${summary}`);
         for (const p of g.parts) lines.push(`   · ${p.amount || '适量'}${p.notes ? '（' + p.notes + '）' : ''}(${p.from})`);
       }
     }
@@ -273,25 +272,11 @@ function CartDrawer({ cart, onClose }) {
   };
 
   const copy = async () => {
-    try { await navigator.clipboard.writeText(buildText('todo')); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
-  };
-
-  const shareToNotes = async () => {
-    const text = buildText('todo');
-    if (navigator.share) {
-      try { await navigator.share({ title: '今日菜单', text }); return; } catch (_) { /* user cancelled or unsupported */ }
-    }
-    // 桌面或 navigator.share 不可用时,退回复制 + 提示。
-    try {
-      await navigator.clipboard.writeText(text);
-      alert('已复制到剪贴板。打开备忘录粘贴,然后全选 → 格式 → 检查清单,一步变成可勾选清单。');
-    } catch {
-      alert('请用「复制为文字」按钮手动复制。');
-    }
+    try { await navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   };
 
   const download = () => {
-    const blob = new Blob([buildText('pretty')], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([buildText()], { type: 'text/plain;charset=utf-8' });
     const u = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = u; a.download = `菜单-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
@@ -366,14 +351,10 @@ function CartDrawer({ cart, onClose }) {
                 </div>
               </div>
               <div className="actions">
-                <button className="btn coral" onClick={shareToNotes}>📝 发送到备忘录</button>
-                <button className="btn ghost" onClick={copy}>{copied ? '已复制 ✓' : '复制为文字'}</button>
+                <button className="btn coral" onClick={copy}>{copied ? '已复制 ✓' : '复制为文字'}</button>
                 <button className="btn ghost" onClick={download}>下载 .txt</button>
                 <button className="btn ghost" onClick={() => setView('list')}>← 返回菜单</button>
               </div>
-              <p className="empty" style={{ padding: '4px 0', textAlign: 'left', fontSize: 12 }}>
-                提示:发送到备忘录后,在备忘录里全选 → 顶部「ⓘ 格式」→ 检查清单,即可变成可勾选的 todo。
-              </p>
             </>
           )}
         </div>
