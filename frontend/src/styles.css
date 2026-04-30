@@ -632,19 +632,19 @@ main { padding: 32px 0 64px; }
   backdrop-filter: blur(4px);
   z-index: 50;
   animation: fadeIn .2s ease both;
+  display: flex;
+  align-items: flex-end;
 }
 .sheet {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  width: 100%;
   max-width: 720px;
-  margin: 0 auto;
   max-height: 92vh;
   overflow-y: auto;
   background: var(--cream);
   border-radius: 24px 24px 0 0;
   animation: sheetUp .35s cubic-bezier(.32,.72,0,1) both;
+  margin: 0 auto;
 }
 .sheet-head {
   padding: 36px 28px 24px;
