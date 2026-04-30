@@ -147,9 +147,12 @@ export async function moveRecipe(client, recipeId, folderId) {
 
 export async function ensureDefaultFolder(client, userId) {
   const folders = await listFolders(client, userId);
-  const owned = folders.find((f) => f.isOwner);
-  if (owned) return owned;
-  return createFolder(client, userId, '我的食谱');
+  let owned = folders.find((f) => f.isOwner);
+  if (!owned) owned = await createFolder(client, userId, '我的食谱');
+  // Backfill orphan recipes (folder_id NULL, e.g. created before folders existed)
+  // into the default folder. RLS limits this to the calling user's own rows.
+  await client.from('recipes').update({ folder_id: owned.id }).is('folder_id', null);
+  return owned;
 }
 
 export async function createInvite(client, userId, folderId, role, ttlDays) {
