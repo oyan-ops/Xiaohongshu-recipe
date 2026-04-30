@@ -552,7 +552,7 @@ function PlanView({ cart, mode }) {
           <div>
             <div className="plan-big-date">{monthDayLabel(selectedDate)}</div>
             <div className="plan-weekday">{weekdayLong(selectedDate)}</div>
-            <div className="plan-relative">{relativeLabel(selectedDate)} · {formatFullDate(selectedDate)}</div>
+            <div className="plan-relative">{relativeLabel(selectedDate)}</div>
           </div>
           {mode === 'plan' && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
