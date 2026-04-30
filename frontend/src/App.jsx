@@ -48,6 +48,9 @@ export default function App() {
   const inviteMatch = window.location.pathname.match(/^\/invite\/([^/?#]+)/);
   if (inviteMatch) return <InvitePage token={inviteMatch[1]} session={session} />;
 
+  const planInviteMatch = window.location.pathname.match(/^\/plan-invite\/([^/?#]+)/);
+  if (planInviteMatch) return <PlanInvitePage token={planInviteMatch[1]} session={session} />;
+
   if (!session) return <Login />;
   return <Main session={session} />;
 }
@@ -98,6 +101,59 @@ function InvitePage({ token, session }) {
             </p>
             <button className="btn coral" onClick={accept} disabled={accepting} style={{ padding: '14px 24px' }}>
               {accepting ? '加入中…' : session ? '加入文件夹' : '使用 Google 登录并加入'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanInvitePage({ token, session }) {
+  const [invite, setInvite] = useState(null);
+  const [error, setError] = useState(null);
+  const [accepting, setAccepting] = useState(false);
+
+  useEffect(() => {
+    fetch(apiUrl(`/api/plan-invites/${token}`))
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => ok ? setInvite(d.invite) : setError(d.error || '邀请无效'));
+  }, [token]);
+
+  const accept = async () => {
+    if (!session) {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href },
+      });
+      return;
+    }
+    setAccepting(true);
+    try {
+      const res = await authFetch(`/api/plan-invites/${token}/accept`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '加入失败');
+      window.location.replace('/');
+    } catch (e) { setError(e.message); setAccepting(false); }
+  };
+
+  return (
+    <div className="app">
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 20, padding: 32, textAlign: 'center'
+      }}>
+        <h1 className="serif" style={{ fontSize: 28, fontWeight: 600 }}>做菜计划共享邀请</h1>
+        {error && <p className="banner error" style={{ display: 'inline-block' }}>{error}</p>}
+        {!error && !invite && <p className="empty">加载中…</p>}
+        {invite && (
+          <>
+            <p style={{ color: 'var(--ink-soft)', maxWidth: 380, lineHeight: 1.6 }}>
+              <strong>{invite.ownerName || invite.ownerEmail || '某用户'}</strong> 邀请你查看他们的做菜计划
+              ,权限为 <strong>{invite.role === 'editor' ? '可编辑' : '只读'}</strong>。
+            </p>
+            <button className="btn coral" onClick={accept} disabled={accepting} style={{ padding: '14px 24px' }}>
+              {accepting ? '加入中…' : session ? '加入计划' : '使用 Google 登录并加入'}
             </button>
           </>
         )}
@@ -210,12 +266,12 @@ function Main({ session }) {
         )}
         {tab === 'plan' && (
           <div className="slide-up">
-            <PlanView cart={cart} mode="plan" />
+            <PlanView cart={cart} mode="plan" session={session} />
           </div>
         )}
         {tab === 'history' && (
           <div className="slide-up">
-            <PlanView cart={cart} mode="history" />
+            <PlanView cart={cart} mode="history" session={session} />
           </div>
         )}
       </main>
@@ -564,10 +620,12 @@ function RangeAddBar({ plans, today, onAdd }) {
   );
 }
 
-function PlanView({ cart, mode }) {
+function PlanView({ cart, mode, session }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null);
+  const [showShare, setShowShare] = useState(false);
+  const [userMap, setUserMap] = useState({});
   const today = todayISO();
   const initialDate = today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -584,6 +642,17 @@ function PlanView({ cart, mode }) {
       const res = await authFetch(url);
       const data = await res.json();
       setPlans(data.plans || []);
+      // Collect owner IDs and fetch their profiles
+      const ownerIds = Array.from(new Set((data.plans || []).map(p => p.ownerId).filter(Boolean)));
+      if (ownerIds.length > 0) {
+        const res = await authFetch('/api/users/lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: ownerIds }),
+        });
+        const data = await res.json();
+        setUserMap(data.users || {});
+      }
     } finally { setLoading(false); }
   };
 
@@ -637,10 +706,15 @@ function PlanView({ cart, mode }) {
   return (
     <div>
       <div className="section-head">
-        {mode === 'history'
-          ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
-          : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
-        }
+        <div>
+          {mode === 'history'
+            ? <><h2>做菜记录</h2><p>真做过的菜的轨迹 — 在「计划」里点 ☑ 之后才会出现在这里。</p></>
+            : <><h2>做菜计划</h2><p>点日历选一天 → 加菜 / 标做过。下方还可以一次性把几天的菜加进购物车。</p></>
+          }
+        </div>
+        {mode === 'plan' && (
+          <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowShare(true)}>共享</button>
+        )}
       </div>
 
       {mode === 'history' && <HeatMap plans={plans} />}
@@ -717,21 +791,26 @@ function PlanView({ cart, mode }) {
               </p>
             : (
               <div className="plan-cards">
-                {selectedList.map((p) => (
-                  <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
-                    {mode === 'plan' && (
-                      <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
-                    )}
-                    {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
-                    <div className="plan-card-body">
-                      <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
-                      {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
+                {selectedList.map((p) => {
+                  const owner = p.ownerId && userMap[p.ownerId];
+                  const ownerName = owner?.name || owner?.email || null;
+                  return (
+                    <div key={p.id} className={`plan-card ${p.cooked ? 'cooked' : ''}`}>
+                      {mode === 'plan' && (
+                        <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
+                      )}
+                      {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
+                      <div className="plan-card-body">
+                        <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
+                        {ownerName && <div className="plan-card-label">{ownerName} 的菜</div>}
+                        {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
+                      </div>
+                      {mode === 'plan' && (
+                        <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
+                      )}
                     </div>
-                    {mode === 'plan' && (
-                      <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => remove(p.id)}>移除</button>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )
         }
@@ -751,6 +830,12 @@ function PlanView({ cart, mode }) {
             setShowPicker(null);
             load();
           }}
+        />
+      )}
+      {showShare && (
+        <PlanShareModal
+          onClose={() => setShowShare(false)}
+          onMemberRemoved={load}
         />
       )}
     </div>
@@ -820,6 +905,128 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
                 取消
               </button>
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PlanShareModal({ onClose, onMemberRemoved }) {
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [invite, setInvite] = useState(null);
+  const [inviteRole, setInviteRole] = useState('editor');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await authFetch('/api/plans/members');
+        const data = await res.json();
+        setMembers(data.members || []);
+      } finally { setLoading(false); }
+    };
+    load();
+  }, []);
+
+  const createInvite = async () => {
+    setGenerating(true);
+    try {
+      const res = await authFetch('/api/plans/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: inviteRole, ttlDays: 7 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setInvite(data.invite);
+    } catch (e) {
+      alert('生成失败: ' + e.message);
+    } finally { setGenerating(false); }
+  };
+
+  const copyLink = () => {
+    const link = `${window.location.origin}/plan-invite/${invite.token}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const removeMember = async (userId) => {
+    if (!confirm('确定要移除此成员吗？')) return;
+    try {
+      await authFetch(`/api/plans/members/${userId}`, { method: 'DELETE' });
+      setMembers(members.filter(m => m.userId !== userId));
+      onMemberRemoved();
+    } catch (e) {
+      alert('移除失败: ' + e.message);
+    }
+  };
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div className="sheet-head">
+          <button className="sheet-close" onClick={onClose}>✕</button>
+          <h2>共享我的做菜计划</h2>
+        </div>
+        <div className="sheet-body">
+          {loading ? (
+            <p className="empty">加载中…</p>
+          ) : (
+            <>
+              {members.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>当前成员</h3>
+                  <div className="ing-list">
+                    {members.map(m => (
+                      <div key={m.userId} className="ing" style={{ justifyContent: 'space-between' }}>
+                        <div>
+                          <div className="name">{m.name || m.email}</div>
+                          <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginTop: 4 }}>
+                            {m.role === 'editor' ? '可编辑' : '只读'} · 加入于 {new Date(m.joinedAt).toLocaleDateString('zh-CN')}
+                          </div>
+                        </div>
+                        <button className="btn ghost" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => removeMember(m.userId)}>移除</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: 'var(--ink)' }}>生成邀请链接</h3>
+                {!invite ? (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <select className="input" value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ flex: 1 }}>
+                      <option value="editor">可编辑</option>
+                      <option value="viewer">只读</option>
+                    </select>
+                    <button className="btn coral" onClick={createInvite} disabled={generating} style={{ padding: '8px 14px' }}>
+                      {generating ? '生成中…' : '生成'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: 12, backgroundColor: 'var(--bg-mute)', borderRadius: 8, borderLeft: '3px solid var(--primary)' }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink-mute)', marginBottom: 8 }}>邀请链接（7天有效）：</div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        className="input"
+                        value={`${window.location.origin}/plan-invite/${invite.token}`}
+                        readOnly
+                        style={{ flex: 1, fontSize: 11 }}
+                      />
+                      <button className="btn coral" onClick={copyLink} style={{ padding: '8px 12px', fontSize: 11, whiteSpace: 'nowrap' }}>
+                        {copied ? '已复制' : '复制'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
   listPlans, createPlan, deletePlan, updatePlanCooked,
+  createPlanInvite, readPlanInvite, acceptPlanInvite, listPlanMembers, removePlanMember, listSharedOwners,
 } from './lib/db.js';
 
 const app = express();
@@ -323,8 +324,53 @@ app.delete('/api/recipes/:id', requireAuth, async (req, res) => {
 
 app.get('/api/plans', requireAuth, async (req, res) => {
   try {
-    const plans = await listPlans(req.client, req.query.from || null, req.query.to || null);
-    res.json({ plans });
+    const fromDate = req.query.from || null;
+    const toDate = req.query.to || null;
+
+    // 查询用户自己的计划
+    const ownPlans = await listPlans(req.client, fromDate, toDate);
+    const plansWithOwner = ownPlans.map(p => ({ ...p, ownerId: req.userId }));
+
+    // 查询用户作为成员能访问的其他owner的计划
+    const admin = adminClient();
+    const sharedOwnerIds = await listSharedOwners(admin, req.userId);
+    let allPlans = plansWithOwner;
+
+    for (const ownerId of sharedOwnerIds) {
+      let q = admin
+        .from('meal_plans')
+        .select('id, plan_date, cooked, recipe_id, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
+        .eq('user_id', ownerId)
+        .order('plan_date', { ascending: true });
+      if (fromDate) q = q.gte('plan_date', fromDate);
+      if (toDate) q = q.lte('plan_date', toDate);
+      const { data, error } = await q;
+
+      if (!error && data) {
+        const ownerPlans = (data || []).map((p) => ({
+          id: p.id,
+          date: p.plan_date,
+          cooked: !!p.cooked,
+          recipeId: p.recipe_id,
+          recipe: p.recipes ? {
+            id: p.recipes.id,
+            title: p.recipes.title,
+            description: p.recipes.description,
+            coverImage: p.recipes.cover_image,
+            prepTime: p.recipes.prep_time,
+            cookTime: p.recipes.cook_time,
+            servings: p.recipes.servings,
+            ingredients: p.recipes.ingredients || [],
+            difficulty: p.recipes.difficulty,
+            effortMinutes: p.recipes.effort_minutes,
+          } : null,
+          ownerId,
+        }));
+        allPlans = allPlans.concat(ownerPlans);
+      }
+    }
+
+    res.json({ plans: allPlans });
     // 后台异步评估未评分的菜谱，不阻塞用户请求
     (async () => {
       try {
@@ -370,6 +416,56 @@ app.patch('/api/plans/:id', requireAuth, async (req, res) => {
     const plan = await updatePlanCooked(req.client, req.params.id, cooked);
     if (!plan) return res.status(404).json({ error: '未找到' });
     res.json({ plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/plans/invite', requireAuth, async (req, res) => {
+  try {
+    const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
+    const ttlDays = Number.isFinite(+req.body?.ttlDays) ? +req.body.ttlDays : 7;
+    const invite = await createPlanInvite(req.client, req.userId, role, ttlDays);
+    res.json({ invite });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plan-invites/:token', async (req, res) => {
+  try {
+    const invite = await readPlanInvite(adminClient(), req.params.token);
+    if (!invite) return res.status(404).json({ error: '邀请不存在' });
+    if (invite.expired) return res.status(410).json({ error: '邀请已过期' });
+    res.json({ invite });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/plan-invites/:token/accept', requireAuth, async (req, res) => {
+  try {
+    const result = await acceptPlanInvite(adminClient(), req.userId, req.params.token);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/plans/members', requireAuth, async (req, res) => {
+  try {
+    const members = await listPlanMembers(adminClient(), req.userId);
+    res.json({ members });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/plans/members/:userId', requireAuth, async (req, res) => {
+  try {
+    const ok = await removePlanMember(adminClient(), req.userId, req.params.userId);
+    if (!ok) return res.status(404).json({ error: '该成员不存在' });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

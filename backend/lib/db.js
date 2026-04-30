@@ -363,3 +363,85 @@ export async function findRecipesBySource(client, sourceUrl, noteId) {
   }
   return Array.from(collected.values()).map(fromRow);
 }
+
+export async function createPlanInvite(client, userId, role, ttlDays) {
+  const token = (globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) +
+    Math.random().toString(36).slice(2);
+  const expires_at = ttlDays > 0
+    ? new Date(Date.now() + ttlDays * 86400000).toISOString()
+    : null;
+  const { data, error } = await client
+    .from('plan_invites')
+    .insert({ token, owner_id: userId, role, created_by: userId, expires_at })
+    .select()
+    .single();
+  if (error) throw new Error('创建邀请失败：' + error.message);
+  return { token: data.token, role: data.role, expiresAt: data.expires_at };
+}
+
+export async function readPlanInvite(adminClient, token) {
+  const { data, error } = await adminClient
+    .from('plan_invites')
+    .select('token, owner_id, role, expires_at')
+    .eq('token', token)
+    .maybeSingle();
+  if (error) throw new Error('读取邀请失败：' + error.message);
+  if (!data) return null;
+  if (data.expires_at && new Date(data.expires_at) < new Date()) return { expired: true };
+  const ownerProfile = await getUserProfiles(adminClient, [data.owner_id]);
+  const owner = ownerProfile[data.owner_id] || { email: null, name: null };
+  return {
+    token: data.token,
+    ownerId: data.owner_id,
+    ownerName: owner.name,
+    ownerEmail: owner.email,
+    role: data.role,
+    expiresAt: data.expires_at,
+  };
+}
+
+export async function acceptPlanInvite(adminClient, userId, token) {
+  const invite = await readPlanInvite(adminClient, token);
+  if (!invite || invite.expired) throw new Error('邀请链接已失效');
+  if (invite.ownerId === userId) return { ownerId: invite.ownerId, alreadyOwner: true };
+  const { error } = await adminClient
+    .from('plan_members')
+    .upsert({ owner_id: invite.ownerId, user_id: userId, role: invite.role }, { onConflict: 'owner_id,user_id' });
+  if (error) throw new Error('加入失败：' + error.message);
+  return { ownerId: invite.ownerId, ownerName: invite.ownerName };
+}
+
+export async function listPlanMembers(adminClient, ownerId) {
+  const { data: members, error } = await adminClient
+    .from('plan_members')
+    .select('user_id, role, joined_at')
+    .eq('owner_id', ownerId);
+  if (error) throw new Error('读取成员失败：' + error.message);
+  const userIds = (members || []).map((m) => m.user_id);
+  const profiles = await getUserProfiles(adminClient, userIds);
+  return (members || []).map((m) => ({
+    userId: m.user_id,
+    role: m.role,
+    joinedAt: m.joined_at,
+    ...profiles[m.user_id] || { email: null, name: null },
+  }));
+}
+
+export async function removePlanMember(adminClient, ownerId, userId) {
+  const { error, count } = await adminClient
+    .from('plan_members')
+    .delete({ count: 'exact' })
+    .eq('owner_id', ownerId)
+    .eq('user_id', userId);
+  if (error) throw new Error('移除失败：' + error.message);
+  return count > 0;
+}
+
+export async function listSharedOwners(adminClient, userId) {
+  const { data, error } = await adminClient
+    .from('plan_members')
+    .select('owner_id')
+    .eq('user_id', userId);
+  if (error) throw new Error('读取共享计划失败：' + error.message);
+  return (data || []).map((m) => m.owner_id);
+}
