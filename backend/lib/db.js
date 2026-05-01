@@ -280,7 +280,7 @@ export function adminClient() {
 export async function listPlans(client, fromDate, toDate) {
   let q = client
     .from('meal_plans')
-    .select('id, plan_date, cooked, recipe_id, eat_time, prep_time_mins, meal_type, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
+    .select('id, plan_date, cooked, recipe_id, meal_type, recipes(id, title, description, cover_image, prep_time, cook_time, servings, ingredients, difficulty, effort_minutes)')
     .order('plan_date', { ascending: true });
   if (fromDate) q = q.gte('plan_date', fromDate);
   if (toDate) q = q.lte('plan_date', toDate);
@@ -291,8 +291,6 @@ export async function listPlans(client, fromDate, toDate) {
     date: p.plan_date,
     cooked: !!p.cooked,
     recipeId: p.recipe_id,
-    eatTime: p.eat_time,
-    prepTimeMins: p.prep_time_mins,
     mealType: p.meal_type || 'dinner',
     recipe: p.recipes ? {
       id: p.recipes.id,
@@ -318,33 +316,6 @@ export async function updatePlanCooked(client, id, cooked) {
     .maybeSingle();
   if (error) throw new Error('更新失败：' + error.message);
   return data ? { id: data.id, cooked: !!data.cooked } : null;
-}
-
-export async function updatePlanTiming(client, planId, eatTime, prepTimeMins) {
-  const { data, error } = await client
-    .from('meal_plans')
-    .update({ eat_time: eatTime || null, prep_time_mins: prepTimeMins || 0 })
-    .eq('id', planId)
-    .select()
-    .single();
-  if (error) throw new Error('更新提醒失败：' + error.message);
-  return { id: data.id, eatTime: data.eat_time, prepTimeMins: data.prep_time_mins };
-}
-
-export async function readPlanTiming(client, planId) {
-  const { data, error } = await client
-    .from('meal_plans')
-    .select('id, eat_time, prep_time_mins, recipe_id, recipes(cook_time)')
-    .eq('id', planId)
-    .single();
-  if (error) throw new Error('读取提醒失败：' + error.message);
-  return {
-    id: data.id,
-    eatTime: data.eat_time,
-    prepTimeMins: data.prep_time_mins,
-    recipeId: data.recipe_id,
-    recipe: data.recipes ? { cookTime: data.recipes.cook_time } : null,
-  };
 }
 
 export async function createPlan(client, userId, recipeId, date, mealType = 'dinner') {
@@ -488,36 +459,3 @@ export async function listSharedOwners(adminClient, userId) {
   return (data || []).map((m) => m.owner_id);
 }
 
-export async function getDaySettingsBatch(client, userId, fromDate, toDate) {
-  const { data, error } = await client
-    .from('meal_day_settings')
-    .select('date, breakfast_time, lunch_time, dinner_time')
-    .eq('user_id', userId)
-    .gte('date', fromDate)
-    .lte('date', toDate);
-  if (error) throw new Error('读取餐时设置失败：' + error.message);
-  const map = {};
-  for (const row of (data || [])) {
-    map[row.date] = {
-      breakfastTime: row.breakfast_time,
-      lunchTime: row.lunch_time,
-      dinnerTime: row.dinner_time,
-    };
-  }
-  return map;
-}
-
-export async function upsertDaySettings(client, userId, date, times) {
-  const { data, error } = await client
-    .from('meal_day_settings')
-    .upsert({ user_id: userId, date, ...times }, { onConflict: 'user_id,date' })
-    .select()
-    .single();
-  if (error) throw new Error('保存餐时设置失败：' + error.message);
-  return {
-    date: data.date,
-    breakfastTime: data.breakfast_time,
-    lunchTime: data.lunch_time,
-    dinnerTime: data.dinner_time,
-  };
-}

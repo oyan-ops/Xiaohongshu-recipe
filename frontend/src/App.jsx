@@ -228,12 +228,6 @@ function Main({ session }) {
     loadList();
   }, [activeFolder]);
   useEffect(() => {
-    if (Notification && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  useEffect(() => {
     const handlePaste = (e) => {
       const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
       const planMatch = text.match(/\/plan-invite\/([^/?#\s]+)/);
@@ -324,45 +318,6 @@ function Main({ session }) {
           onClose={() => setClipInvite(null)}
         />
       )}
-    </div>
-  );
-}
-
-function MealTimeEditorModal({ date, mealKey, currentTime, onSave, onClose }) {
-  const [time, setTime] = useState(currentTime || '');
-  const labels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐' };
-  const fieldMap = { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' };
-
-  const save = async () => {
-    try {
-      await authFetch(`/api/day-settings/${date}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [fieldMap[mealKey]]: time || null }),
-      });
-      onSave();
-    } catch (e) {
-      alert('保存失败：' + e.message);
-    }
-  };
-
-  return (
-    <div className="sheet-overlay" onClick={onClose}>
-      <div className="sheet" onClick={e => e.stopPropagation()}>
-        <div className="sheet-head">
-          <button className="sheet-close" onClick={onClose}>✕</button>
-          <h2>设置{labels[mealKey]}时间</h2>
-          <p className="desc">{date}</p>
-        </div>
-        <div className="sheet-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
-            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 16 }} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn coral" style={{ flex: 1 }} onClick={save}>保存</button>
-            <button className="btn ghost" style={{ flex: 1 }} onClick={onClose}>取消</button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -838,8 +793,6 @@ function PlanView({ cart, mode, session }) {
   const [showPicker, setShowPicker] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [userMap, setUserMap] = useState({});
-  const [daySettings, setDaySettings] = useState({});
-  const [showMealTimeEditor, setShowMealTimeEditor] = useState(null);
   const [pendingMealType, setPendingMealType] = useState(null);
   const today = todayISO();
   const initialDate = today;
@@ -868,44 +821,10 @@ function PlanView({ cart, mode, session }) {
         const data = await res.json();
         setUserMap(data.users || {});
       }
-      // Fetch day settings
-      const dsRes = await authFetch(`/api/day-settings?from=${isoFor(start)}&to=${isoFor(end)}`);
-      const dsData = await dsRes.json();
-      setDaySettings(dsData.settings || {});
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [mode, viewYear, viewMonth]);
-
-  useEffect(() => {
-    const checkReminders = () => {
-      const now = new Date();
-      const mealTimeFieldMap = { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' };
-      for (const p of plans) {
-        if (p.cooked) continue;
-        const ds = daySettings[p.date] || {};
-        const mealTime = ds[mealTimeFieldMap[p.mealType || 'dinner']];
-        if (!mealTime) continue;
-        const [h, m] = mealTime.split(':').map(Number);
-        const cookMins = parseMinutes(p.recipe?.cookTime) || 30;
-        const remindDate = new Date();
-        remindDate.setHours(h, m, 0);
-        remindDate.setMinutes(remindDate.getMinutes() - cookMins);
-        const timeDiff = now.getTime() - remindDate.getTime();
-        if (timeDiff >= 0 && timeDiff < 60000) {
-          if (Notification && Notification.permission === 'granted') {
-            new Notification('做菜提醒', {
-              body: `${p.recipe?.title || '菜谱'} 该开始准备了！`,
-              tag: `reminder_${p.id}`,
-            });
-          }
-        }
-      }
-    };
-    const interval = setInterval(checkReminders, 30000);
-    checkReminders();
-    return () => clearInterval(interval);
-  }, [plans, daySettings]);
 
   const remove = async (planId) => {
     await authFetch(`/api/plans/${planId}`, { method: 'DELETE' });
@@ -1044,29 +963,20 @@ function PlanView({ cart, mode, session }) {
               </p>
             : (() => {
               const MEALS = [
-                { key: 'breakfast', label: '早餐', timeField: 'breakfastTime' },
-                { key: 'lunch', label: '午餐', timeField: 'lunchTime' },
-                { key: 'dinner', label: '晚餐', timeField: 'dinnerTime' },
-                { key: 'snack', label: '加餐', timeField: null },
+                { key: 'breakfast', label: '早餐' },
+                { key: 'lunch', label: '午餐' },
+                { key: 'dinner', label: '晚餐' },
+                { key: 'snack', label: '加餐' },
               ];
-              const todaySettings = daySettings[selectedDate] || {};
               return (
                 <div>
                   {MEALS.map(meal => {
                     const mealPlans = selectedList.filter(p => (p.mealType || 'dinner') === meal.key);
-                    const mealTime = meal.timeField ? todaySettings[meal.timeField] : null;
-                    if (mode === 'history' && mealPlans.length === 0) return null;
-                    if (mode !== 'plan' && mealPlans.length === 0 && !mealTime) return null;
+                    if (mode !== 'plan' && mealPlans.length === 0) return null;
                     return (
                       <div key={meal.key} style={{ marginBottom: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 14 }}>{meal.label}</span>
-                          {meal.timeField && (
-                            <button className="btn ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                              onClick={() => setShowMealTimeEditor({ date: selectedDate, mealKey: meal.key })}>
-                              {mealTime || '设置时间'}
-                            </button>
-                          )}
                           {mode === 'plan' && (
                             <button className="btn ghost" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 12 }}
                               onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+</button>
@@ -1125,17 +1035,6 @@ function PlanView({ cart, mode, session }) {
           initialDate={selectedDate}
           onClose={() => setShowShare(false)}
           onMemberRemoved={load}
-        />
-      )}
-      {showMealTimeEditor && (
-        <MealTimeEditorModal
-          date={showMealTimeEditor.date}
-          mealKey={showMealTimeEditor.mealKey}
-          currentTime={daySettings[showMealTimeEditor.date]?.[
-            { breakfast: 'breakfastTime', lunch: 'lunchTime', dinner: 'dinnerTime' }[showMealTimeEditor.mealKey]
-          ]}
-          onSave={() => { setShowMealTimeEditor(null); load(); }}
-          onClose={() => setShowMealTimeEditor(null)}
         />
       )}
     </div>

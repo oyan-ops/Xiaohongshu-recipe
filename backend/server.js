@@ -9,9 +9,8 @@ import {
   listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
-  listPlans, createPlan, deletePlan, updatePlanCooked, updatePlanTiming, readPlanTiming,
+  listPlans, createPlan, deletePlan, updatePlanCooked,
   createPlanInvite, readPlanInvite, acceptPlanInvite, listPlanMembers, removePlanMember, listSharedOwners,
-  getDaySettingsBatch, upsertDaySettings,
 } from './lib/db.js';
 
 const app = express();
@@ -433,19 +432,6 @@ app.patch('/api/plans/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.patch('/api/plans/:id/timing', requireAuth, async (req, res) => {
-  try {
-    const { eatTime, prepTimeMins } = req.body;
-    if (eatTime && !/^\d{2}:\d{2}$/.test(eatTime)) {
-      return res.status(400).json({ error: '无效的时间格式，应为 HH:mm' });
-    }
-    const timing = await updatePlanTiming(req.client, req.params.id, eatTime, prepTimeMins || 0);
-    res.json({ timing });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.post('/api/plans/invite', requireAuth, async (req, res) => {
   try {
     const role = req.body?.role === 'viewer' ? 'viewer' : 'editor';
@@ -586,36 +572,6 @@ app.post('/api/recipes/evaluate-all', requireAuth, async (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ id: req.userId, email: req.userEmail });
-});
-
-app.get('/api/day-settings', requireAuth, async (req, res) => {
-  try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: '缺少 from 或 to 参数' });
-    const settings = await getDaySettingsBatch(req.client, req.userId, from, to);
-    res.json({ settings });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch('/api/day-settings/:date', requireAuth, async (req, res) => {
-  try {
-    const { date } = req.params;
-    const { breakfastTime, lunchTime, dinnerTime } = req.body;
-    const timeRegex = /^\d{2}:\d{2}$/;
-    for (const t of [breakfastTime, lunchTime, dinnerTime]) {
-      if (t && !timeRegex.test(t)) return res.status(400).json({ error: '时间格式错误，应为 HH:mm' });
-    }
-    const result = await upsertDaySettings(req.client, req.userId, date, {
-      breakfast_time: breakfastTime ?? null,
-      lunch_time: lunchTime ?? null,
-      dinner_time: dinnerTime ?? null,
-    });
-    res.json({ settings: result });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
 });
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
