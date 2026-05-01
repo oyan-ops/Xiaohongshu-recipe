@@ -957,10 +957,8 @@ function PlanView({ cart, mode, session }) {
 
         {loading
           ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>加载中…</p>
-          : selectedList.length === 0
-            ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>
-                {mode === 'history' ? '这一天没有记录' : '这一天还没安排,点 + 加菜'}
-              </p>
+          : (mode === 'history' && selectedList.length === 0)
+            ? <p className="empty" style={{ padding: '8px 0', textAlign: 'left', fontSize: 13 }}>这一天没有记录</p>
             : (() => {
               const MEALS = [
                 { key: 'breakfast', label: '早餐' },
