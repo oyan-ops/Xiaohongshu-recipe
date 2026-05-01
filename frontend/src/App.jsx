@@ -976,8 +976,8 @@ function PlanView({ cart, mode, session }) {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 14 }}>{meal.label}</span>
                           {mode === 'plan' && (
-                            <button className="btn ghost" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 12 }}
-                              onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+</button>
+                            <button className="btn ghost" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12 }}
+                              onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+ 加菜</button>
                           )}
                         </div>
                         <div className="plan-cards">
