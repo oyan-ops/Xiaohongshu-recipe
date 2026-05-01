@@ -816,7 +816,7 @@ function RangeAddBar({ plans, today, onAdd }) {
   return (
     <div className="range-bar">
       <div className="range-row">
-        <span className="range-label">提前买菜</span>
+        <span className="range-label"></span>
         <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
         <span style={{ color: 'var(--ink-mute)' }}>到</span>
         <input type="date" className="input" value={to} onChange={e => setTo(e.target.value)} />
@@ -1047,22 +1047,26 @@ function PlanView({ cart, mode, session }) {
                 { key: 'breakfast', label: '早餐', timeField: 'breakfastTime' },
                 { key: 'lunch', label: '午餐', timeField: 'lunchTime' },
                 { key: 'dinner', label: '晚餐', timeField: 'dinnerTime' },
+                { key: 'snack', label: '加餐', timeField: null },
               ];
               const todaySettings = daySettings[selectedDate] || {};
               return (
                 <div>
                   {MEALS.map(meal => {
                     const mealPlans = selectedList.filter(p => (p.mealType || 'dinner') === meal.key);
-                    const mealTime = todaySettings[meal.timeField];
-                    if (mealPlans.length === 0 && !mealTime) return null;
+                    const mealTime = meal.timeField ? todaySettings[meal.timeField] : null;
+                    if (mode === 'history' && mealPlans.length === 0) return null;
+                    if (mode !== 'plan' && mealPlans.length === 0 && !mealTime) return null;
                     return (
                       <div key={meal.key} style={{ marginBottom: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 14 }}>{meal.label}</span>
-                          <button className="btn ghost" style={{ padding: '2px 8px', fontSize: 12 }}
-                            onClick={() => setShowMealTimeEditor({ date: selectedDate, mealKey: meal.key })}>
-                            {mealTime || '设置时间'}
-                          </button>
+                          {meal.timeField && (
+                            <button className="btn ghost" style={{ padding: '2px 8px', fontSize: 12 }}
+                              onClick={() => setShowMealTimeEditor({ date: selectedDate, mealKey: meal.key })}>
+                              {mealTime || '设置时间'}
+                            </button>
+                          )}
                           {mode === 'plan' && (
                             <button className="btn ghost" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 12 }}
                               onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+</button>

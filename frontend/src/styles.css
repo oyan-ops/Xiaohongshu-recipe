@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Fredoka:wght@500;600;700&family=Gaegu:wght@400;700&family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&display=swap');
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -836,8 +836,6 @@ main { padding: 32px 0 64px; }
 /* ============================================
    HAND-DRAWN / SKETCH STYLE OVERRIDES
    ============================================ */
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Gaegu:wght@400;700&family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&display=swap');
-
 :root {
   --paper: #FBF6EA;
   --paper-card: #FFFDF6;
