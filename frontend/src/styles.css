@@ -857,7 +857,7 @@ body {
     radial-gradient(circle at 80% 70%, rgba(168, 213, 186, 0.05) 0, transparent 40%),
     repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(43, 38, 34, 0.04) 28px, rgba(43, 38, 34, 0.04) 29px);
   color: var(--sketch-ink);
-  font-size: 17px;
+  font-size: 15px;
 }
 
 .serif,
@@ -874,9 +874,14 @@ body {
   letter-spacing: 0 !important;
 }
 
-.brand h1 { font-size: 38px; }
-.section-head h2 { font-size: 30px; }
-.plan-big-date { font-size: 42px; }
+.brand h1 { font-size: 26px; }
+.section-head h2 { font-size: 22px; }
+.plan-big-date { font-size: 30px; }
+.tab { font-size: 17px !important; padding: 4px 4px 10px !important; }
+.btn { font-size: 14px; padding: 10px 14px; }
+.input { font-size: 14px; padding: 10px 12px; }
+.folder-pill { font-size: 13px; padding: 6px 12px; }
+.cart-fab { font-size: 14px; padding: 10px 16px; }
 
 /* Wobbly borders via double-stroke + slight rotation */
 .input,
