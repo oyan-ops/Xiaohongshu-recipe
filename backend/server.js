@@ -6,7 +6,7 @@ import { fetchXhsPost } from './lib/xhs.js';
 import {
   clientForUser, adminClient,
   insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource, updateRecipeTitle,
-  listFolders, createFolder, renameFolder, deleteFolder, moveRecipe, ensureDefaultFolder,
+  listFolders, createFolder, renameFolder, deleteFolder, reorderFolders, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
   listPlans, createPlan, deletePlan, updatePlanCooked,
@@ -254,6 +254,17 @@ app.post('/api/folders', requireAuth, async (req, res) => {
   if (!name) return res.status(400).json({ error: '缺少文件夹名称' });
   try {
     res.json({ folder: await createFolder(req.client, req.userId, name) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/folders/reorder', requireAuth, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: '缺少 ids' });
+    await reorderFolders(req.client, req.userId, ids);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

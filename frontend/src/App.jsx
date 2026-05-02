@@ -1,6 +1,40 @@
 import { useState, useEffect } from 'react';
 import { authFetch, apiUrl } from './api';
 import { supabase } from './supabase';
+import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
+import { SortableContext, useSortable, arrayMove, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRemove }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: folder.id, disabled: !folder.isOwner });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    touchAction: folder.isOwner ? 'none' : 'auto',
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`folder-pill ${active ? 'active' : ''}`}
+      onClick={() => onSelect(folder.id)}
+      {...(folder.isOwner ? attributes : {})}
+      {...(folder.isOwner ? listeners : {})}
+    >
+      <span>{folder.name}</span>
+      {folder.memberCount > 0 && <span className="badge">共享 {folder.memberCount}</span>}
+      {!folder.isOwner && <span className="badge">受邀</span>}
+      {active && folder.isOwner && (
+        <span className="folder-actions" onPointerDown={(e) => e.stopPropagation()}>
+          <button onClick={(e) => { e.stopPropagation(); onShare(folder); }} title="分享">⇪</button>
+          <button onClick={(e) => onRename(folder, e)} title="改名">✎</button>
+          <button onClick={(e) => onRemove(folder, e)} title="删除">✕</button>
+        </span>
+      )}
+    </div>
+  );
+}
 
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
@@ -278,6 +312,7 @@ function Main({ session }) {
           <div className="slide-up">
             <FolderBar
               folders={folders}
+              setFolders={setFolders}
               active={activeFolder}
               setActive={setActiveFolder}
               reload={loadFolders}
@@ -1335,7 +1370,7 @@ function PlanShareModal({ initialDate, onClose, onMemberRemoved }) {
   );
 }
 
-function FolderBar({ folders, active, setActive, reload }) {
+function FolderBar({ folders, setFolders, active, setActive, reload }) {
   const [shareFor, setShareFor] = useState(null);
 
   const create = async () => {
@@ -1369,27 +1404,47 @@ function FolderBar({ folders, active, setActive, reload }) {
     reload();
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
+
+  const onDragEnd = async (event) => {
+    const { active: a, over } = event;
+    if (!over || a.id === over.id) return;
+    const oldIdx = folders.findIndex(f => f.id === a.id);
+    const newIdx = folders.findIndex(f => f.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(folders, oldIdx, newIdx);
+    setFolders?.(reordered);
+    try {
+      await authFetch('/api/folders/reorder', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: reordered.map(f => f.id) }),
+      });
+    } catch (e) {
+      reload();
+    }
+  };
+
   return (
     <>
       <div className="folder-bar">
-        {folders.map(f => (
-          <div
-            key={f.id}
-            className={`folder-pill ${active === f.id ? 'active' : ''}`}
-            onClick={() => setActive(f.id)}
-          >
-            <span>{f.name}</span>
-            {f.memberCount > 0 && <span className="badge">共享 {f.memberCount}</span>}
-            {!f.isOwner && <span className="badge">受邀</span>}
-            {active === f.id && f.isOwner && (
-              <span className="folder-actions">
-                <button onClick={(e) => { e.stopPropagation(); setShareFor(f); }} title="分享">⇪</button>
-                <button onClick={(e) => rename(f, e)} title="改名">✎</button>
-                <button onClick={(e) => remove(f, e)} title="删除">✕</button>
-              </span>
-            )}
-          </div>
-        ))}
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={folders.map(f => f.id)} strategy={horizontalListSortingStrategy}>
+            {folders.map(f => (
+              <SortableFolderPill
+                key={f.id}
+                folder={f}
+                active={active === f.id}
+                onSelect={setActive}
+                onShare={(folder) => setShareFor(folder)}
+                onRename={rename}
+                onRemove={remove}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
         <button className="folder-pill add" onClick={create}>+ 新建</button>
       </div>
       {shareFor && <ShareModal folder={shareFor} onClose={() => setShareFor(null)} />}

@@ -141,7 +141,8 @@ export async function removeFolderMember(adminCli, folderId, userId) {
 export async function listFolders(client, userId) {
   const { data, error } = await client
     .from('folders')
-    .select('id,name,owner_id,created_at')
+    .select('id,name,owner_id,created_at,position')
+    .order('position', { ascending: true })
     .order('created_at', { ascending: true });
   if (error) throw new Error('读取文件夹失败：' + error.message);
   const folders = data || [];
@@ -160,9 +161,19 @@ export async function listFolders(client, userId) {
     id: f.id,
     name: f.name,
     createdAt: f.created_at,
+    position: f.position ?? 0,
     isOwner: f.owner_id === userId,
     memberCount: memberCounts[f.id] || 0,
   }));
+}
+
+export async function reorderFolders(client, userId, orderedIds) {
+  const updates = orderedIds.map((id, idx) =>
+    client.from('folders').update({ position: idx }).eq('id', id).eq('owner_id', userId)
+  );
+  const results = await Promise.all(updates);
+  for (const r of results) if (r.error) throw new Error('排序失败：' + r.error.message);
+  return true;
 }
 
 export async function createFolder(client, userId, name) {
