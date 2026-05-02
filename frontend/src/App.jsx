@@ -380,12 +380,12 @@ function Main({ session }) {
         )}
         {tab === 'plan' && (
           <div className="slide-up">
-            <PlanView cart={cart} mode="plan" session={session} />
+            <PlanView cart={cart} mode="plan" session={session} folders={folders} />
           </div>
         )}
         {tab === 'history' && (
           <div className="slide-up">
-            <PlanView cart={cart} mode="history" session={session} />
+            <PlanView cart={cart} mode="history" session={session} folders={folders} />
           </div>
         )}
       </main>
@@ -826,13 +826,20 @@ function RangeAddBar({ plans, today, onAdd }) {
   );
 }
 
-function PlanView({ cart, mode, session }) {
+function PlanView({ cart, mode, session, folders }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [userMap, setUserMap] = useState({});
   const [pendingMealType, setPendingMealType] = useState(null);
+  const [openRecipe, setOpenRecipe] = useState(null);
+  const openRecipeById = async (id) => {
+    if (!id) return;
+    const res = await authFetch(`/api/recipes/${id}`);
+    const data = await res.json();
+    if (data.recipe) setOpenRecipe(data.recipe);
+  };
   const today = todayISO();
   const initialDate = today;
   const [selectedDate, setSelectedDate] = useState(initialDate);
@@ -1024,8 +1031,13 @@ function PlanView({ cart, mode, session }) {
                                 {mode === 'plan' && (
                                   <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
                                 )}
-                                {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
-                                <div className="plan-card-body">
+                                {p.recipe?.coverImage && (
+                                  <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer"
+                                    style={{ cursor: p.recipeId ? 'pointer' : 'default' }}
+                                    onClick={() => openRecipeById(p.recipeId)} />
+                                )}
+                                <div className="plan-card-body" style={{ cursor: p.recipeId ? 'pointer' : 'default' }}
+                                  onClick={() => openRecipeById(p.recipeId)}>
                                   <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
                                   {ownerName && <div className="plan-card-label">{ownerName} 加入</div>}
                                   {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
@@ -1068,6 +1080,13 @@ function PlanView({ cart, mode, session }) {
           initialDate={selectedDate}
           onClose={() => setShowShare(false)}
           onMemberRemoved={load}
+        />
+      )}
+      {openRecipe && (
+        <RecipeDetail
+          recipe={openRecipe}
+          folders={folders || []}
+          onClose={() => setOpenRecipe(null)}
         />
       )}
     </div>
