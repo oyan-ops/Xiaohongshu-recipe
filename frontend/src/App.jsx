@@ -808,9 +808,8 @@ function TopRecipes({ plans }) {
             padding: '10px 12px', backgroundColor: 'var(--bg-raised)', borderRadius: 8
           }}>
             <div style={{
-              width: 24, height: 24, borderRadius: '50%', backgroundColor: 'var(--primary)',
-              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 600
+              width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, fontWeight: 700, color: '#B04832'
             }}>
               {idx + 1}
             </div>

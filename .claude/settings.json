@@ -6,7 +6,8 @@
       "Bash(node -c backend/server.js)"
     ],
     "additionalDirectories": [
-      "/Users/oliviayan/.claude/plans"
+      "/Users/oliviayan/.claude/plans",
+      "/Users/oliviayan/Desktop"
     ]
   }
 }
