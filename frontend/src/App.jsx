@@ -45,9 +45,9 @@ function Login() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
-  const signInGoogle = async () => {
+  const signInOAuth = async (provider) => {
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: { redirectTo: window.location.origin },
     });
   };
@@ -102,8 +102,11 @@ function Login() {
             或
             <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
           </div>
-          <button className="btn" onClick={signInGoogle} style={{ padding: '14px 24px' }}>
+          <button className="btn" onClick={() => signInOAuth('google')} style={{ padding: '14px 24px' }}>
             使用 Google 登录
+          </button>
+          <button className="btn" onClick={() => signInOAuth('github')} style={{ padding: '14px 24px', background: '#24292f', color: '#fff' }}>
+            使用 GitHub 登录
           </button>
         </div>
       </div>
