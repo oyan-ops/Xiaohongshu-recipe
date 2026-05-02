@@ -989,7 +989,7 @@ function PlanView({ cart, mode, session, folders }) {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {selectedList.length > 0 && (
                 <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
-                  onClick={() => addAllToCart(selectedList.map(p => p.recipeId))}>全部加入菜单</button>
+                  onClick={() => addAllToCart(selectedList.filter(p => !p.cooked).map(p => p.recipeId))}>全部加入菜单</button>
               )}
               <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
                 onClick={() => setShowShare(true)}>共享计划</button>
