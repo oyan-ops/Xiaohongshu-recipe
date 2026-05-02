@@ -1,6 +1,18 @@
-# 小红书食谱 - 用户指南 / User Guide
+# RedRecipe - 用户指南 / User Guide
+
+🔗 在线地址：https://myredrecipe.com
 
 ## 中文版本 / Chinese Version
+
+### 🔐 登录方式
+
+打开 RedRecipe 后有三种登录方式：
+
+- **Google 登录**：一键 OAuth 跳转
+- **GitHub 登录**：一键 OAuth 跳转
+- **邮箱 Magic Link**：输入邮箱 → 收到登录链接 → 点击直接登录，免密码
+
+⚠️ 不同登录方式会创建不同账号，互不互通。建议固定使用一种方式。
 
 ### 📱 主要功能
 
@@ -17,17 +29,19 @@
   - **浏览食谱**：点击食谱卡片查看完整详情（包括材料、步骤、营养信息）
   - **编辑菜谱名**：在食谱详情页标题旁的「编辑」按钮修改名称
   - **文件夹管理**：顶部按钮管理文件夹，点击不同文件夹查看相应食谱
+  - **拖拽排序文件夹**：长按（手机）或点住（桌面）你创建的文件夹标签拖动改变顺序
   - **批量操作**：
     - 点「批量选择」进入批量模式
     - 逐个勾选食谱或点「全选」选择所有
-    - 点「批量移动」将选中食谱移动到其他文件夹
+    - 「移到...」下拉将选中食谱移动到其他文件夹
+    - 「删除」批量删除选中食谱
   - **添加到购物车**：食谱卡片右下角「+」按钮加入购物车
 
 #### 3. 做菜计划（Plan Tab）
 - **功能**：规划每天做什么菜，追踪准备进度
 - **如何使用**：
   1. **选择日期**：点击日历选择要规划的日期
-  2. **加菜**：点「+ 加菜」按钮从食谱库选择要做的菜
+  2. **按餐次加菜**：每天分为 **早餐 / 午餐 / 晚餐 / 加餐** 四个分组，点对应分组的「+ 加菜」从食谱库选菜
   3. **标记完成**：做完后点菜谱卡片前的「☑」标记为已做
   4. **批量加购物车**：选择日期范围，点「全部加入菜单」将那段时间的菜加入购物车
   5. **共享计划**：
@@ -73,6 +87,16 @@
 
 ## English Version
 
+### 🔐 Sign-in
+
+Three ways to sign in:
+
+- **Google OAuth**
+- **GitHub OAuth**
+- **Email magic link** — enter your email, get a one-time login link, no password
+
+⚠️ Each provider creates a separate account; they aren't merged automatically. Pick one and stick with it.
+
 ### 📱 Main Features
 
 #### 1. Extract Recipe (Extract Tab)
@@ -88,17 +112,19 @@
   - **Browse recipes**: Click a recipe card to see full details (ingredients, steps, nutrition info)
   - **Edit recipe name**: Click the "Edit" button next to the title in recipe detail
   - **Folder management**: Use top buttons to manage folders, click to filter recipes
+  - **Reorder folders**: long-press (mobile) or click-and-hold (desktop) on a folder tab to drag-reorder
   - **Batch operations**:
     - Click "Batch Select" to enter batch mode
     - Check individual recipes or click "Select All"
-    - Click "Batch Move" to move selected recipes to another folder
+    - Use the "Move to..." dropdown to move selected recipes to another folder
+    - Click "Delete" to bulk-delete selected recipes
   - **Add to cart**: Click "+" button on recipe card to add to shopping cart
 
 #### 3. Meal Plan (Plan Tab)
 - **Function**: Plan what to cook each day and track cooking progress
 - **How to use**:
   1. **Select date**: Click calendar to pick a date to plan
-  2. **Add recipes**: Click "+ Add Recipe" to select dishes from library
+  2. **Add by meal**: each day is split into **breakfast / lunch / dinner / snack**. Click "+ Add Recipe" under the right meal section.
   3. **Mark complete**: Click "☑" on recipe card after cooking
   4. **Batch add to cart**: Select date range, click "Add All to Cart" to add all dishes in that period
   5. **Share plan**:

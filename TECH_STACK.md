@@ -17,7 +17,7 @@
 ### 外部服务
 - **Supabase**：数据库、认证、实时同步
 - **Render**：后端服务器托管
-- **Google OAuth**：用户认证
+- **认证**：Supabase Auth — Google OAuth、GitHub OAuth、邮箱 Magic Link
 - **AI 评估**：Claude API（食谱难度和用时评估）
 
 ---
@@ -55,10 +55,11 @@ role ('viewer'/'editor') | created_at
 
 **4. folders 表**
 ```
-id (PK) | owner_id (FK) | name | created_at
+id (PK) | owner_id (FK) | name | position (INT) | created_at
 ```
 - 用户创建的文件夹
 - 用于组织食谱
+- `position` 用于拖拽排序（数值越小越靠前）
 
 **5. folder_contents 表**
 ```
@@ -75,11 +76,13 @@ role ('viewer'/'editor') | created_at
 
 **7. meal_plans 表**
 ```
-id (PK) | user_id (FK) | recipe_id (FK) | date (ISO format) | 
-cooked (boolean) | created_at | owner_id (FK)
+id (PK) | user_id (FK) | recipe_id (FK) | plan_date (ISO format) |
+cooked (boolean) | meal_type ('breakfast'/'lunch'/'dinner'/'snack') |
+created_at | owner_id (FK)
 ```
 - 存储计划和历史记录
 - `cooked = true` 表示已做过的菜（出现在历史记录中）
+- `meal_type` 区分早 / 午 / 晚 / 加餐分组，默认 `dinner`
 - `owner_id` 在多人共享计划时记录添加者
 
 **8. plan_invites 表**
@@ -337,10 +340,13 @@ getSelectedDates() {
 ## 🔐 认证和授权
 
 ### 认证流程
-1. 用户点 Google 登录
-2. Supabase OAuth 重定向到 Google
-3. 登录成功后获得 Session Token
-4. 存储在 localStorage，每次请求在 Authorization header 中
+支持三种登录方式（同一份 user 表）：
+
+1. **Google OAuth** — `supabase.auth.signInWithOAuth({ provider: 'google' })`
+2. **GitHub OAuth** — `supabase.auth.signInWithOAuth({ provider: 'github' })`
+3. **Email Magic Link** — `supabase.auth.signInWithOtp({ email })`，Supabase 自动发邮件，用户点链接回调登录
+
+成功后获得 Session Token，存 localStorage，每次请求在 Authorization header 中。注意：每种 provider 各自创建 user_id，不会自动合并。
 
 ### API 授权
 ```javascript
@@ -369,19 +375,23 @@ app.use((req, res, next) => {
 - `POST /api/recipes` - 创建食谱
 - `PATCH /api/recipes/:id` - 编辑菜谱名
 - `DELETE /api/recipes/:id` - 删除食谱
+- `PATCH /api/recipes/batch/move` - 批量移动到文件夹
+- `POST /api/recipes/batch/delete` - 批量删除
 - `POST /api/recipes/invite` - 创建食谱分享邀请
 - `GET /api/invites/:token` - 获取分享邀请信息
 - `POST /api/invites/:token/accept` - 接受分享邀请
 
 ### 文件夹相关
-- `GET /api/folders` - 列出用户文件夹
+- `GET /api/folders` - 列出用户文件夹（按 position 排序）
 - `POST /api/folders` - 创建文件夹
+- `PATCH /api/folders/:id` - 改名
 - `DELETE /api/folders/:id` - 删除文件夹
+- `PATCH /api/folders/reorder` - 拖拽排序后保存新顺序
 - `POST /api/folders/:id/add-recipes` - 批量添加食谱到文件夹
 
 ### 计划相关
-- `GET /api/plans` - 列出计划和历史
-- `POST /api/plans` - 创建计划项
+- `GET /api/plans` - 列出计划和历史（含 mealType）
+- `POST /api/plans` - 创建计划项（接受 mealType）
 - `PATCH /api/plans/:id` - 更新（标记完成）
 - `DELETE /api/plans/:id` - 删除计划项
 - `POST /api/plans/invite` - 创建计划分享邀请（支持 dates）
@@ -393,8 +403,9 @@ app.use((req, res, next) => {
 ## 🚀 部署架构
 
 ### 前端
-- **托管**：Vercel / GitHub Pages（可选）
+- **托管**：Render Static Site（自定义域名 `myredrecipe.com`，DNS 在 Cloudflare）
 - **构建**：`npm run build` → `/dist` 文件夹
+- **SPA 路由**：`public/_redirects` (`/*  /index.html  200`)
 - **自动部署**：push 到 main 分支触发构建
 
 ### 后端

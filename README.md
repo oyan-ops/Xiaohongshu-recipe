@@ -1,4 +1,4 @@
-# 小红书食谱转换工具 / Xiaohongshu Recipe Extractor
+# RedRecipe / 小红书食谱转换工具
 
 [中文](#中文) · [English](#english)
 
@@ -9,7 +9,7 @@
 把小红书帖子链接 → AI 自动整理成结构化食谱 → 存入云端食谱库。  
 **安装为 PWA 后**，可以从小红书 app 直接「分享」帖子到这个工具，自动生成。
 
-🔗 在线地址：https://xiaohongshu-recipe-web.onrender.com
+🔗 在线地址：https://myredrecipe.com
 
 ### 功能
 
@@ -17,14 +17,20 @@
 - 📱 **PWA + Share Target**：装到主屏幕，从小红书直接分享帖子进来（Android 完整支持）
 - ✨ Claude Opus 4.7 提取食材、步骤、份量、时间、标签、小贴士
 - 📚 **云端食谱库**（Supabase）：跨设备同步，列表 / 详情 / 删除
+- 📁 **文件夹分类**：拖拽排序、分享给他人、批量移动 / 批量删除
+- 📅 **每日做菜计划**：按早 / 中 / 晚 / 加餐分组、可标完成、可计划共享
+- 📊 **做菜记录**：12 周热力图 + 常做的菜排行
+- 🛒 **购物车**：从食谱或计划批量加食材，一次性抄家
+- 🔐 **多种登录方式**：Google、GitHub OAuth 一键登录，邮箱 Magic Link 免密登录
 - 🎬 食谱里保留**原帖链接**和**原视频链接**
 - 📥 单条食谱导出 JSON
 
 ### 技术栈
 
-- 前端：React + Vite + PWA（manifest + share_target + service worker）
+- 前端：React + Vite + PWA（manifest + share_target + service worker），@dnd-kit 实现拖拽排序
 - 后端：Node.js + Express，部署在 Render
-- 存储：Supabase (Postgres)
+- 存储：Supabase (Postgres)，含 Row Level Security
+- 认证：Supabase Auth（Google / GitHub OAuth + Email Magic Link）
 - AI：Anthropic Claude Opus 4.7（图文混合输入）
 - 小红书抓取：带 cookies 请求帖子页面，解析 `window.__INITIAL_STATE__`
 
@@ -60,28 +66,9 @@ PORT=3001
 cookies 会过期（数周到数月），失效后重新导出即可。  
 线上部署时将同样的内容设置为环境变量 `XHS_COOKIES`。
 
-#### 3. Supabase 建表（SQL Editor 跑一次）
+#### 3. Supabase 建表
 
-```sql
-create table recipes (
-  id uuid primary key default gen_random_uuid(),
-  title text,
-  description text,
-  servings text,
-  prep_time text,
-  cook_time text,
-  ingredients jsonb,
-  steps jsonb,
-  tags jsonb,
-  tips jsonb,
-  source_url text,
-  video_url text,
-  cover_image text,
-  author text,
-  extracted_at timestamptz default now()
-);
-create index on recipes (extracted_at desc);
-```
+数据模型现已包含 recipes / folders / folder_members / meal_plans / recipe_invites / plan_invites 等表，全部开启 RLS。详见 [TECH_STACK.md](TECH_STACK.md#数据库结构) 的「数据库结构」一节，按里面的字段建表即可。
 
 #### 4. 启动
 
@@ -117,12 +104,12 @@ frontend/
 
 ### API
 
-| Method | Path | 说明 |
-|--------|------|------|
-| POST   | `/api/recipe/from-link` | `{url}` → 抓取并提取 |
-| GET    | `/api/recipes`          | 食谱列表 |
-| GET    | `/api/recipes/:id`      | 食谱详情 |
-| DELETE | `/api/recipes/:id`      | 删除 |
+完整 API 列表见 [TECH_STACK.md](TECH_STACK.md)。简要分组：
+
+- 食谱：`/api/extract`, `/api/recipes`（CRUD + batch move/delete）, `/api/recipes/invite`
+- 文件夹：`/api/folders`（CRUD）, `/api/folders/reorder`, `/api/folders/:id/add-recipes`
+- 计划：`/api/plans`（CRUD + cooked toggle）, `/api/plans/invite`
+- 邀请：`/api/invites/:token` 系列, `/api/plan-invites/:token` 系列
 
 ### 部署架构
 
@@ -149,22 +136,28 @@ frontend/
 Paste a Xiaohongshu (Little Red Book) post URL → Claude turns it into a structured recipe → saved to a cloud recipe library.  
 **Install as a PWA** to share posts directly from Xiaohongshu into the app (Android).
 
-🔗 Live: https://xiaohongshu-recipe-web.onrender.com
+🔗 Live: https://myredrecipe.com
 
 ### Features
 
 - 🔗 **Paste a link**: backend fetches title, body, cover image, and video URL from any Xiaohongshu post
 - 📱 **PWA + Share Target**: install to home screen and share posts straight from Xiaohongshu (Android)
 - ✨ Claude Opus 4.7 extracts ingredients, steps, servings, timing, tags, tips
-- 📚 **Cloud recipe library** (Supabase): syncs across devices
+- 📚 **Cloud recipe library** (Supabase) with cross-device sync
+- 📁 **Folders** with drag-to-reorder, sharing, batch move / batch delete
+- 📅 **Daily meal planner** grouped by breakfast / lunch / dinner / snack, with shareable date ranges
+- 📊 **Cooking history** — 12-week heatmap and top-5 most-cooked dishes
+- 🛒 **Shopping cart** — add ingredients from recipes or plans
+- 🔐 **Multiple sign-in methods**: Google, GitHub OAuth, and email magic link
 - 🎬 Each recipe keeps the **original post URL** and **video URL**
 - 📥 One-click export to JSON
 
 ### Stack
 
-- Frontend: React + Vite + PWA (manifest + share_target + service worker)
+- Frontend: React + Vite + PWA (manifest + share_target + service worker), @dnd-kit for sortable folders
 - Backend: Node.js + Express, deployed on Render
-- Storage: Supabase (Postgres)
+- Storage: Supabase (Postgres) with Row Level Security
+- Auth: Supabase Auth (Google / GitHub OAuth + email magic link)
 - AI: Anthropic Claude Opus 4.7 (image + text input)
 - Xiaohongshu scraping: cookie-authed HTTP request, parses `window.__INITIAL_STATE__`
 
@@ -199,9 +192,9 @@ PORT=3001
 
 For cloud deployment, set the same value as the `XHS_COOKIES` env var.
 
-#### 3. Create the Supabase table
+#### 3. Create the Supabase tables
 
-Same SQL as above.
+The data model now includes recipes / folders / folder_members / meal_plans / recipe_invites / plan_invites with RLS enabled. See the schema section in [TECH_STACK.md](TECH_STACK.md#数据库结构).
 
 #### 4. Run
 
@@ -215,12 +208,7 @@ cd frontend && npm install && npm run dev  # http://localhost:5173
 
 ### API
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST   | `/api/recipe/from-link` | `{url}` → scrape + extract |
-| GET    | `/api/recipes`          | List |
-| GET    | `/api/recipes/:id`      | Detail |
-| DELETE | `/api/recipes/:id`      | Delete |
+See [TECH_STACK.md](TECH_STACK.md) for the full list. Grouped by domain: recipes, folders, meal plans, recipe/plan invites.
 
 ### Deployment
 
