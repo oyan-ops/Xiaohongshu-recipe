@@ -6,9 +6,9 @@ const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
 function Login() {
-  const signIn = async () => {
+  const signIn = async (provider) => {
     await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: { redirectTo: window.location.origin },
     });
   };
@@ -18,13 +18,18 @@ function Login() {
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 24, padding: 32, textAlign: 'center'
       }}>
-        <h1 className="serif" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>小红书食谱</h1>
+        <h1 className="serif" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>RedRecipe</h1>
         <p style={{ color: 'var(--ink-soft)', maxWidth: 360, lineHeight: 1.6 }}>
           把你收藏的小红书帖子,一键变成结构化食谱。登录后开始建立你自己的食谱库。
         </p>
-        <button className="btn" onClick={signIn} style={{ padding: '14px 24px' }}>
-          使用 Google 登录
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 280 }}>
+          <button className="btn" onClick={() => signIn('google')} style={{ padding: '14px 24px' }}>
+            使用 Google 登录
+          </button>
+          <button className="btn" onClick={() => signIn('apple')} style={{ padding: '14px 24px', background: '#000', color: '#fff' }}>
+             使用 Apple 登录
+          </button>
+        </div>
       </div>
     </div>
   );
