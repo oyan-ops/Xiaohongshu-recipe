@@ -1670,6 +1670,18 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
     reload();
   };
 
+  const bulkDelete = async () => {
+    if (selectedBatch.size === 0) return;
+    if (!confirm(`确定删除选中的 ${selectedBatch.size} 道食谱？`)) return;
+    await authFetch(`/api/recipes/batch/delete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedBatch) }),
+    });
+    setSelectedBatch(new Set());
+    setBatchMode(false);
+    reload();
+  };
+
   const filtered = recipes.filter(r => {
     const term = q.toLowerCase();
     return !term
@@ -1749,6 +1761,9 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
                 <option value="">移到...</option>
                 {folders.filter(f => f.id !== activeFolder).map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
+            )}
+            {selectedBatch.size > 0 && (
+              <button className="btn danger" style={{ padding: '6px 12px', fontSize: 12 }} onClick={bulkDelete}>删除</button>
             )}
             <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setSelectedBatch(new Set()); setBatchMode(false); }}>关闭</button>
           </div>

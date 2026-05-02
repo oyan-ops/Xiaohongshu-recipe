@@ -312,6 +312,17 @@ app.patch('/api/recipes/batch/move', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/api/recipes/batch/delete', requireAuth, async (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: '至少选择一条食谱' });
+    const results = await Promise.all(ids.map(id => deleteRecipe(req.client, id)));
+    res.json({ deleted: results.filter(Boolean).length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/recipes/:id', requireAuth, async (req, res) => {
   try {
     const recipe = await getRecipe(req.client, req.params.id);
