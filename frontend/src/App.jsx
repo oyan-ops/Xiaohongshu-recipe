@@ -1728,7 +1728,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
         )}
       </div>
       {batchMode && (
-        <div className="batch-bar" style={{ padding: '12px 16px', backgroundColor: '#FAFAFA', borderBottom: '1px solid #E5E5E5', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div className="batch-bar" style={{ padding: '12px 0', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', whiteSpace: 'nowrap' }}>
             <span style={{ whiteSpace: 'nowrap' }}>已选择 {selectedBatch.size} 道食谱</span>
             <button
