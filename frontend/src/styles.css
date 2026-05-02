@@ -879,7 +879,7 @@ body {
 .plan-big-date { font-size: 20px; }
 .tab { font-size: 17px !important; padding: 4px 4px 10px !important; }
 .btn { font-size: 14px; padding: 10px 14px; }
-.input { font-size: 14px; padding: 14px 14px; }
+.input { font-size: 14px; padding: 18px 18px; line-height: 1.4; }
 .folder-pill { font-size: 13px; padding: 6px 12px; }
 .cart-fab { font-size: 14px; padding: 10px 16px; }
 
