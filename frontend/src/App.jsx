@@ -503,54 +503,12 @@ function CartDrawer({ cart, onClose }) {
     return `${s} - ${p.from}`;
   };
 
-  const buildText = () => {
-    const lines = [];
-    lines.push('今日菜单');
-    lines.push('━━━━━━━━━━');
-    for (const r of items) lines.push(`· ${r.title || '未命名'}`);
-    lines.push('');
-    lines.push('食材清单');
-    lines.push('━━━━━━━━━━');
-    for (const g of grouped) {
-      if (g.parts.length === 1) {
-        const p = g.parts[0];
-        lines.push(`${g.name}${p.amount ? ' — ' + p.amount : ''}${p.notes ? '（' + p.notes + '）' : ''}`);
-      } else {
-        const summary = g.parts.map(p => p.amount || '适量').join(' + ');
-        lines.push(`${g.name} — ${summary}`);
-        for (const p of g.parts) lines.push(`   · ${p.amount || '适量'}${p.notes ? '（' + p.notes + '）' : ''}(${p.from})`);
-      }
-    }
-    return lines.join('\n');
-  };
-
-  const buildSimpleList = () => {
-    const names = grouped.map(g => g.name);
-    return names.join('\n');
-  };
-
   const copy = async () => {
-    try { await navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
-  };
-
-  const copySimple = async () => {
-    try { await navigator.clipboard.writeText(buildSimpleList()); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
-  };
-
-  const download = () => {
-    const blob = new Blob([buildText()], { type: 'text/plain;charset=utf-8' });
-    const u = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = u; a.download = `菜单-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
-    URL.revokeObjectURL(u);
-  };
-
-  const downloadSimple = () => {
-    const blob = new Blob([buildSimpleList()], { type: 'text/plain;charset=utf-8' });
-    const u = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = u; a.download = `食材-${new Date().toISOString().slice(0, 10)}.txt`; a.click();
-    URL.revokeObjectURL(u);
+    try {
+      await navigator.clipboard.writeText(grouped.map(g => g.name).join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
   };
 
   return (
@@ -622,9 +580,6 @@ function CartDrawer({ cart, onClose }) {
               </div>
               <div className="actions">
                 <button className="btn coral" onClick={copy}>{copied ? '已复制 ✓' : '复制清单'}</button>
-                <button className="btn ghost" onClick={download}>下载详细清单</button>
-                <button className="btn ghost" onClick={copySimple}>复制食材名</button>
-                <button className="btn ghost" onClick={downloadSimple}>下载食材名</button>
                 <button className="btn ghost" onClick={() => setView('list')}>← 返回菜单</button>
               </div>
             </>
