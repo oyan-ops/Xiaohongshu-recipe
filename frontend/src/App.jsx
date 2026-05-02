@@ -6,9 +6,9 @@ const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
 function Login() {
-  const signIn = async (provider) => {
+  const signIn = async () => {
     await supabase.auth.signInWithOAuth({
-      provider,
+      provider: 'google',
       options: { redirectTo: window.location.origin },
     });
   };
@@ -22,14 +22,9 @@ function Login() {
         <p style={{ color: 'var(--ink-soft)', maxWidth: 360, lineHeight: 1.6 }}>
           把你收藏的小红书帖子,一键变成结构化食谱。登录后开始建立你自己的食谱库。
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 280 }}>
-          <button className="btn" onClick={() => signIn('google')} style={{ padding: '14px 24px' }}>
-            使用 Google 登录
-          </button>
-          <button className="btn" onClick={() => signIn('apple')} style={{ padding: '14px 24px', background: '#000', color: '#fff' }}>
-             使用 Apple 登录
-          </button>
-        </div>
+        <button className="btn" onClick={signIn} style={{ padding: '14px 24px' }}>
+          使用 Google 登录
+        </button>
       </div>
     </div>
   );
