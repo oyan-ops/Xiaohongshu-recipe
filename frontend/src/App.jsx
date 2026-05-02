@@ -988,7 +988,7 @@ function PlanView({ cart, mode, session }) {
                                 {p.recipe?.coverImage && <img src={p.recipe.coverImage} alt="" referrerPolicy="no-referrer" />}
                                 <div className="plan-card-body">
                                   <div className="plan-card-title">{p.recipe?.title || '(食谱已删除)'}</div>
-                                  {ownerName && <div className="plan-card-label">{ownerName} 的菜</div>}
+                                  {ownerName && <div className="plan-card-label">{ownerName} 加入</div>}
                                   {p.recipe?.cookTime && <div className="plan-card-meta">烹饪 {p.recipe.cookTime}</div>}
                                 </div>
                                 {mode === 'plan' && (
