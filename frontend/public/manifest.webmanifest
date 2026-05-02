@@ -1,6 +1,6 @@
 {
-  "name": "小红书食谱",
-  "short_name": "食谱",
+  "name": "RedRecipe",
+  "short_name": "RedRecipe",
   "description": "把小红书帖子自动整理成食谱",
   "start_url": "/",
   "display": "standalone",
