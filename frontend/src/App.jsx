@@ -78,8 +78,8 @@ function Login() {
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320 }}>
           {sent ? (
-            <p style={{ padding: 14, background: 'var(--cream-card)', borderRadius: 12, fontSize: 14 }}>
-              登录链接已发到 <strong>{email}</strong>，去邮箱点链接登录。
+            <p style={{ padding: 14, fontSize: 14 }}>
+              登录链接已发到 <strong>{email}</strong>，请前往邮箱点击链接登录。
             </p>
           ) : (
             <form onSubmit={sendMagicLink} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
