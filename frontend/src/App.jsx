@@ -40,25 +40,72 @@ const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
 function Login() {
-  const signIn = async () => {
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+
+  const signInGoogle = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
     });
   };
+
+  const sendMagicLink = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim()) return;
+    setSending(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setSending(false);
+    if (error) setError(error.message);
+    else setSent(true);
+  };
+
   return (
     <div className="app">
       <div style={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 24, padding: 32, textAlign: 'center'
+        alignItems: 'center', justifyContent: 'center', gap: 20, padding: 32, textAlign: 'center'
       }}>
         <h1 className="serif" style={{ fontSize: 36, fontWeight: 600, letterSpacing: '-0.02em' }}>RedRecipe</h1>
         <p style={{ color: 'var(--ink-soft)', maxWidth: 360, lineHeight: 1.6 }}>
           把你收藏的小红书帖子,一键变成结构化食谱。登录后开始建立你自己的食谱库。
         </p>
-        <button className="btn" onClick={signIn} style={{ padding: '14px 24px' }}>
-          使用 Google 登录
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320 }}>
+          {sent ? (
+            <p style={{ padding: 14, background: 'var(--cream-card)', borderRadius: 12, fontSize: 14 }}>
+              登录链接已发到 <strong>{email}</strong>，去邮箱点链接登录。
+            </p>
+          ) : (
+            <form onSubmit={sendMagicLink} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input
+                type="email"
+                className="input"
+                placeholder="邮箱"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <button type="submit" className="btn coral" disabled={sending} style={{ padding: '14px 24px' }}>
+                {sending ? '发送中…' : '发送登录链接'}
+              </button>
+              {error && <p style={{ color: 'var(--coral)', fontSize: 13 }}>{error}</p>}
+            </form>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--ink-mute)', fontSize: 12 }}>
+            <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+            或
+            <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
+          </div>
+          <button className="btn" onClick={signInGoogle} style={{ padding: '14px 24px' }}>
+            使用 Google 登录
+          </button>
+        </div>
       </div>
     </div>
   );
