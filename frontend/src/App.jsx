@@ -947,10 +947,6 @@ function PlanView({ cart, mode, session }) {
               )}
               <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }}
                 onClick={() => setShowShare(true)}>共享计划</button>
-              {allowEdit && (
-                <button className="btn coral" style={{ padding: '6px 14px', fontSize: 12 }}
-                  onClick={() => { setPendingMealType('dinner'); setShowPicker(selectedDate); }}>+ 加菜</button>
-              )}
             </div>
           )}
         </div>
