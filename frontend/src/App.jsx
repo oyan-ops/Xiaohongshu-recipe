@@ -1744,6 +1744,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
             >
               {selectedBatch.size === filtered.length && selectedBatch.size > 0 ? '取消全选' : '全选'}
             </button>
+            <button className="btn ghost" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => { setSelectedBatch(new Set()); setBatchMode(false); }}>关闭</button>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {selectedBatch.size > 0 && (
@@ -1765,7 +1766,6 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
             {selectedBatch.size > 0 && (
               <button className="btn danger" style={{ padding: '6px 12px', fontSize: 12 }} onClick={bulkDelete}>删除</button>
             )}
-            <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => { setSelectedBatch(new Set()); setBatchMode(false); }}>关闭</button>
           </div>
         </div>
       )}
