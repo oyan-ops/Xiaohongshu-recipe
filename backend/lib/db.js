@@ -60,9 +60,11 @@ export async function insertRecipe(client, userId, recipe) {
 }
 
 export async function listRecipes(client, folderId) {
+  // Select minimal fields for list view performance; detail view uses getRecipe()
+  // Include tags for search/filtering; other detailed fields loaded separately
   let q = client
     .from('recipes')
-    .select('id,folder_id,user_id,title,description,tags,source_url,cover_image,prep_time,cook_time,servings,extracted_at')
+    .select('id,folder_id,user_id,title,description,cover_image,tags,extracted_at')
     .order('extracted_at', { ascending: false });
   if (folderId) q = q.eq('folder_id', folderId);
   const { data, error } = await q;
@@ -73,12 +75,8 @@ export async function listRecipes(client, folderId) {
     userId: r.user_id,
     title: r.title,
     description: r.description,
-    tags: r.tags || [],
-    sourceUrl: r.source_url,
     coverImage: r.cover_image,
-    prepTime: r.prep_time,
-    cookTime: r.cook_time,
-    servings: r.servings,
+    tags: r.tags || [],
     extractedAt: r.extracted_at,
   }));
 }
