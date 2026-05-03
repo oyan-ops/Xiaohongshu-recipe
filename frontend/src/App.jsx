@@ -39,18 +39,24 @@ function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRem
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
-// Default: load directly from origin so we don't bottleneck on a single proxy.
-// `w` (CSS px) only used by the wsrv fallback below.
-const cdnImg = (url) => url;
+// Edge-cached image proxy. Pass-through only — no webp transcode or resize —
+// so wsrv's worker queue isn't a bottleneck. First fetch is slow (wsrv pulls
+// from XHS), subsequent loads hit the edge cache and are fast.
+const cdnImg = (url) => {
+  if (!url) return url;
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+  const u = url.replace(/^https?:\/\//, '');
+  return `https://wsrv.nl/?url=${encodeURIComponent(u)}`;
+};
 
-// On error, retry through wsrv.nl edge cache. Marks the element so we don't loop.
+// On error, fall back to the origin URL (referrerPolicy=no-referrer is enough
+// to bypass most XHS hotlink blocks).
 const fallbackViaProxy = (e, originalUrl) => {
   if (!originalUrl) return;
   const el = e.currentTarget;
   if (el.dataset.fallback === '1') return;
   el.dataset.fallback = '1';
-  const u = originalUrl.replace(/^https?:\/\//, '');
-  el.src = `https://wsrv.nl/?url=${encodeURIComponent(u)}`;
+  el.src = originalUrl;
 };
 
 function Login() {
