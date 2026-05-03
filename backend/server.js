@@ -170,6 +170,7 @@ app.post('/api/recipes/backfill-covers', requireAuth, async (req, res) => {
   try {
     const rows = await listAllRecipeIdsAndCovers(req.client);
     const supaPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/recipe-covers/`;
+    const refresh = req.query.refresh === '1' || req.body?.refresh === true;
     let migrated = 0;
     let skipped = 0;
     let failed = 0;
@@ -178,7 +179,18 @@ app.post('/api/recipes/backfill-covers', requireAuth, async (req, res) => {
         skipped++;
         continue;
       }
-      const mirrored = await mirrorImage(row.cover_image);
+      // Try mirroring the saved URL first.
+      let mirrored = await mirrorImage(row.cover_image);
+      // If that failed (returned the same URL) and refresh=1, re-fetch from XHS.
+      if (refresh && mirrored === row.cover_image && row.source_url) {
+        try {
+          const post = await fetchXhsPost(row.source_url);
+          const fresh = post.coverImage || (post.images && post.images[0]);
+          if (fresh) mirrored = await mirrorImage(fresh);
+        } catch (e) {
+          console.warn('refresh failed for', row.source_url, e.message);
+        }
+      }
       if (mirrored && mirrored !== row.cover_image) {
         await updateRecipeCover(req.client, row.id, mirrored);
         migrated++;

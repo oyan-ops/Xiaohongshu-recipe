@@ -231,7 +231,7 @@ export async function updateRecipeTitle(client, recipeId, title) {
 export async function listAllRecipeIdsAndCovers(client) {
   const { data, error } = await client
     .from('recipes')
-    .select('id, cover_image');
+    .select('id, cover_image, source_url');
   if (error) throw new Error('读取失败：' + error.message);
   return data || [];
 }
