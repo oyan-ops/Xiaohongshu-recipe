@@ -23,20 +23,44 @@ const inferExt = (contentType, url) => {
   return m ? m[1].toLowerCase().replace('jpeg', 'jpg') : 'jpg';
 };
 
-// Download `url` (XHS-friendly headers) and upload to Supabase Storage.
+async function tryFetch(url, withXhsHeaders) {
+  const headers = withXhsHeaders
+    ? { 'User-Agent': UA, 'Referer': 'https://www.xiaohongshu.com/' }
+    : { 'User-Agent': UA };
+  const resp = await fetch(url, { headers });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp;
+}
+
+// Download `url` and upload to Supabase Storage. Tries:
+//   1. direct fetch with XHS referer
+//   2. direct fetch without referer
+//   3. fetch through wsrv.nl (which often has the image edge-cached even when
+//      the origin signed URL has expired)
 // Returns the public URL of the mirrored copy, or the original URL on failure.
 export async function mirrorImage(url) {
   if (isAlreadyMirrored(url)) return url;
+  const u = url.replace(/^https?:\/\//, '');
+  const attempts = [
+    () => tryFetch(url, true),
+    () => tryFetch(url, false),
+    () => tryFetch(`https://wsrv.nl/?url=${encodeURIComponent(u)}`, false),
+  ];
+  let resp = null;
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try { resp = await attempt(); break; }
+    catch (e) { lastErr = e; }
+  }
+  if (!resp) {
+    console.warn('mirrorImage all attempts failed for', url, lastErr?.message);
+    return url;
+  }
+
   try {
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': UA,
-        'Referer': 'https://www.xiaohongshu.com/',
-      },
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const contentType = resp.headers.get('content-type') || 'image/jpeg';
     const buf = Buffer.from(await resp.arrayBuffer());
+    if (buf.length < 500) throw new Error('response too small, likely error page');
     const ext = inferExt(contentType, url);
     const hash = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16);
     const key = `${hash}.${ext}`;
@@ -52,7 +76,7 @@ export async function mirrorImage(url) {
     const { data } = supa.storage.from(BUCKET).getPublicUrl(key);
     return data.publicUrl;
   } catch (err) {
-    console.warn('mirrorImage failed for', url, err.message);
+    console.warn('mirrorImage upload failed for', url, err.message);
     return url;
   }
 }
