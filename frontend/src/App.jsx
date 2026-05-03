@@ -350,7 +350,7 @@ function Main({ session }) {
         <div className="brand">
           <h1>MyRedRecipe</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span className="count">{userName} · {recipes.length} 道</span>
+            <span className="count">{userName}</span>
             <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={signOut}>退出</button>
           </div>
         </div>
