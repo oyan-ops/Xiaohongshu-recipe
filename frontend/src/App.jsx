@@ -348,7 +348,7 @@ function Main({ session }) {
     <div className="app">
       <header className="header">
         <div className="brand">
-          <h1>小红书食谱</h1>
+          <h1>MyRedRecipe</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span className="count">{userName} · {recipes.length} 道</span>
             <button className="btn ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={signOut}>退出</button>
