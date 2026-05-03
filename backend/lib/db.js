@@ -228,6 +228,22 @@ export async function updateRecipeTitle(client, recipeId, title) {
   return data ? fromRow(data) : null;
 }
 
+export async function listAllRecipeIdsAndCovers(client) {
+  const { data, error } = await client
+    .from('recipes')
+    .select('id, cover_image');
+  if (error) throw new Error('读取失败：' + error.message);
+  return data || [];
+}
+
+export async function updateRecipeCover(client, recipeId, coverImage) {
+  const { error } = await client
+    .from('recipes')
+    .update({ cover_image: coverImage })
+    .eq('id', recipeId);
+  if (error) throw new Error('更新封面失败：' + error.message);
+}
+
 export async function ensureDefaultFolder(client, userId) {
   const folders = await listFolders(client, userId);
   let owned = folders.find((f) => f.isOwner);

@@ -3,9 +3,10 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
+import { mirrorImage } from './lib/storage.js';
 import {
   clientForUser, adminClient,
-  insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource, updateRecipeTitle,
+  insertRecipe, listRecipes, getRecipe, deleteRecipe, findRecipesBySource, updateRecipeTitle, listAllRecipeIdsAndCovers, updateRecipeCover,
   listFolders, createFolder, renameFolder, deleteFolder, reorderFolders, moveRecipe, ensureDefaultFolder,
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
@@ -138,12 +139,13 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
     for (const r of recipes) {
       const idx = Number.isInteger(r.imageIndex) ? r.imageIndex : 0;
       const dishImage = imageUrls[idx] || post.coverImage || null;
+      const mirrored = dishImage ? await mirrorImage(dishImage) : null;
       const row = await insertRecipe(req.client, req.userId, {
         ...r,
         folderId,
         sourceUrl: post.sourceUrl,
         videoUrl: post.videoUrl,
-        coverImage: dishImage,
+        coverImage: mirrored,
         author: post.author,
       });
       saved.push(row);
@@ -159,6 +161,32 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
 app.get('/api/recipes', requireAuth, async (req, res) => {
   try {
     res.json({ recipes: await listRecipes(req.client, req.query.folder || null) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/recipes/backfill-covers', requireAuth, async (req, res) => {
+  try {
+    const rows = await listAllRecipeIdsAndCovers(req.client);
+    const supaPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/recipe-covers/`;
+    let migrated = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const row of rows) {
+      if (!row.cover_image || row.cover_image.startsWith(supaPrefix)) {
+        skipped++;
+        continue;
+      }
+      const mirrored = await mirrorImage(row.cover_image);
+      if (mirrored && mirrored !== row.cover_image) {
+        await updateRecipeCover(req.client, row.id, mirrored);
+        migrated++;
+      } else {
+        failed++;
+      }
+    }
+    res.json({ migrated, skipped, failed, total: rows.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

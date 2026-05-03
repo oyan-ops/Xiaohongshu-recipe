@@ -39,24 +39,18 @@ function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRem
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
-// Edge-cached image proxy. Pass-through only — no webp transcode or resize —
-// so wsrv's worker queue isn't a bottleneck. First fetch is slow (wsrv pulls
-// from XHS), subsequent loads hit the edge cache and are fast.
-const cdnImg = (url) => {
-  if (!url) return url;
-  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-  const u = url.replace(/^https?:\/\//, '');
-  return `https://wsrv.nl/?url=${encodeURIComponent(u)}`;
-};
+// Newly-extracted recipes mirror covers into Supabase Storage at save time,
+// so this is a pass-through. Old XHS URLs are routed through wsrv as a
+// graceful fallback until the backfill completes.
+const cdnImg = (url) => url;
 
-// On error, fall back to the origin URL (referrerPolicy=no-referrer is enough
-// to bypass most XHS hotlink blocks).
 const fallbackViaProxy = (e, originalUrl) => {
   if (!originalUrl) return;
   const el = e.currentTarget;
   if (el.dataset.fallback === '1') return;
   el.dataset.fallback = '1';
-  el.src = originalUrl;
+  const u = originalUrl.replace(/^https?:\/\//, '');
+  el.src = `https://wsrv.nl/?url=${encodeURIComponent(u)}`;
 };
 
 function Login() {
