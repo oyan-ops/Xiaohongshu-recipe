@@ -50,6 +50,13 @@ const cdnImg = (url, w) => {
   return `https://wsrv.nl/?${params.toString()}`;
 };
 
+// Fallback to original URL if wsrv can't fetch (some XHS signed URLs choke).
+const fallbackToOriginal = (e, originalUrl) => {
+  if (e.currentTarget.dataset.fallback === '1' || !originalUrl) return;
+  e.currentTarget.dataset.fallback = '1';
+  e.currentTarget.src = originalUrl;
+};
+
 function Login() {
   const [email, setEmail] = useState('');
   const [sending, setSending] = useState(false);
@@ -548,6 +555,7 @@ function CartDrawer({ cart, onClose }) {
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                         {r.coverImage && (
                           <img src={cdnImg(r.coverImage, 48)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                            onError={(e) => fallbackToOriginal(e, r.coverImage)}
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                         )}
                         <span className="name">{r.title || '未命名'}</span>
@@ -1044,6 +1052,7 @@ function PlanView({ cart, mode, session, folders }) {
                                 )}
                                 {p.recipe?.coverImage && (
                                   <img src={cdnImg(p.recipe.coverImage, 200)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                                    onError={(e) => fallbackToOriginal(e, p.recipe.coverImage)}
                                     style={{ cursor: p.recipeId ? 'pointer' : 'default' }}
                                     onClick={() => openRecipeById(p.recipeId)} />
                                 )}
@@ -1149,7 +1158,7 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
                   style={{ cursor: 'pointer', backgroundColor: selected.has(r.id) ? '#E6F4FF' : '' }}
                 >
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
-                    {r.coverImage && <img src={cdnImg(r.coverImage, 36)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
+                    {r.coverImage && <img src={cdnImg(r.coverImage, 36)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, r.coverImage)} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
                     <span className="name">{r.title || '未命名'}</span>
                   </div>
                   <span className="amount">{selected.has(r.id) ? '✓' : '+'}</span>
@@ -1899,7 +1908,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
                 />
               )}
               {r.coverImage
-                ? <img className="card-img" src={cdnImg(r.coverImage, 280)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+                ? <img className="card-img" src={cdnImg(r.coverImage, 280)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, r.coverImage)} />
                 : <div className="card-img placeholder" />}
               {cart && (
                 <button
@@ -2001,7 +2010,7 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
         <div className="sheet-head">
           <button className="sheet-close" onClick={onClose}>✕</button>
           {recipe.coverImage && (
-            <img className="sheet-img" src={cdnImg(recipe.coverImage, 720)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+            <img className="sheet-img" src={cdnImg(recipe.coverImage, 720)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, recipe.coverImage)} />
           )}
           {editingTitle ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
