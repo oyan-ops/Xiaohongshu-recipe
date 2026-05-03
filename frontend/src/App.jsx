@@ -39,22 +39,18 @@ function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRem
 const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
-// Wrap remote images through wsrv.nl: edge-cached, supports on-the-fly resize.
-// `w` is the target rendered width in CSS px; we ask for 2x for retina.
-const cdnImg = (url, w) => {
-  if (!url) return url;
-  if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-  const u = url.replace(/^https?:\/\//, '');
-  const params = new URLSearchParams({ url: u, output: 'webp' });
-  if (w) params.set('w', String(w * 2));
-  return `https://wsrv.nl/?${params.toString()}`;
-};
+// Default: load directly from origin so we don't bottleneck on a single proxy.
+// `w` (CSS px) only used by the wsrv fallback below.
+const cdnImg = (url) => url;
 
-// Fallback to original URL if wsrv can't fetch (some XHS signed URLs choke).
-const fallbackToOriginal = (e, originalUrl) => {
-  if (e.currentTarget.dataset.fallback === '1' || !originalUrl) return;
-  e.currentTarget.dataset.fallback = '1';
-  e.currentTarget.src = originalUrl;
+// On error, retry through wsrv.nl edge cache. Marks the element so we don't loop.
+const fallbackViaProxy = (e, originalUrl) => {
+  if (!originalUrl) return;
+  const el = e.currentTarget;
+  if (el.dataset.fallback === '1') return;
+  el.dataset.fallback = '1';
+  const u = originalUrl.replace(/^https?:\/\//, '');
+  el.src = `https://wsrv.nl/?url=${encodeURIComponent(u)}`;
 };
 
 function Login() {
@@ -554,8 +550,8 @@ function CartDrawer({ cart, onClose }) {
                     <div key={r.id} className="ing">
                       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                         {r.coverImage && (
-                          <img src={cdnImg(r.coverImage, 48)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-                            onError={(e) => fallbackToOriginal(e, r.coverImage)}
+                          <img src={cdnImg(r.coverImage)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                            onError={(e) => fallbackViaProxy(e, r.coverImage)}
                             style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                         )}
                         <span className="name">{r.title || '未命名'}</span>
@@ -1051,8 +1047,8 @@ function PlanView({ cart, mode, session, folders }) {
                                   <button className="plan-cooked-toggle" onClick={() => toggleCooked(p)}>{p.cooked ? '☑' : '☐'}</button>
                                 )}
                                 {p.recipe?.coverImage && (
-                                  <img src={cdnImg(p.recipe.coverImage, 200)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-                                    onError={(e) => fallbackToOriginal(e, p.recipe.coverImage)}
+                                  <img src={cdnImg(p.recipe.coverImage)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
+                                    onError={(e) => fallbackViaProxy(e, p.recipe.coverImage)}
                                     style={{ cursor: p.recipeId ? 'pointer' : 'default' }}
                                     onClick={() => openRecipeById(p.recipeId)} />
                                 )}
@@ -1158,7 +1154,7 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
                   style={{ cursor: 'pointer', backgroundColor: selected.has(r.id) ? '#E6F4FF' : '' }}
                 >
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
-                    {r.coverImage && <img src={cdnImg(r.coverImage, 36)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, r.coverImage)} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
+                    {r.coverImage && <img src={cdnImg(r.coverImage)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackViaProxy(e, r.coverImage)} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />}
                     <span className="name">{r.title || '未命名'}</span>
                   </div>
                   <span className="amount">{selected.has(r.id) ? '✓' : '+'}</span>
@@ -1908,7 +1904,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
                 />
               )}
               {r.coverImage
-                ? <img className="card-img" src={cdnImg(r.coverImage, 280)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, r.coverImage)} />
+                ? <img className="card-img" src={cdnImg(r.coverImage)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackViaProxy(e, r.coverImage)} />
                 : <div className="card-img placeholder" />}
               {cart && (
                 <button
@@ -2010,7 +2006,7 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
         <div className="sheet-head">
           <button className="sheet-close" onClick={onClose}>✕</button>
           {recipe.coverImage && (
-            <img className="sheet-img" src={cdnImg(recipe.coverImage, 720)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackToOriginal(e, recipe.coverImage)} />
+            <img className="sheet-img" src={cdnImg(recipe.coverImage)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={(e) => fallbackViaProxy(e, recipe.coverImage)} />
           )}
           {editingTitle ? (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
