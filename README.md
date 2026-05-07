@@ -133,15 +133,15 @@ frontend/
 
 ## English
 
-Paste a Xiaohongshu (Little Red Book) post URL → Claude turns it into a structured recipe → saved to a cloud recipe library.  
-**Install as a PWA** to share posts directly from Xiaohongshu into the app (Android).
+Paste a RedNote (Little Red Book) post URL → Claude turns it into a structured recipe → saved to a cloud recipe library.  
+**Install as a PWA** to share posts directly from RedNote into the app (Android).
 
 🔗 Live: https://myredrecipe.com
 
 ### Features
 
-- 🔗 **Paste a link**: backend fetches title, body, cover image, and video URL from any Xiaohongshu post
-- 📱 **PWA + Share Target**: install to home screen and share posts straight from Xiaohongshu (Android)
+- 🔗 **Paste a link**: backend fetches title, body, cover image, and video URL from any RedNote post
+- 📱 **PWA + Share Target**: install to home screen and share posts straight from RedNote (Android)
 - ✨ Claude Opus 4.7 extracts ingredients, steps, servings, timing, tags, tips
 - 📚 **Cloud recipe library** (Supabase) with cross-device sync
 - 📁 **Folders** with drag-to-reorder, sharing, batch move / batch delete
@@ -159,7 +159,7 @@ Paste a Xiaohongshu (Little Red Book) post URL → Claude turns it into a struct
 - Storage: Supabase (Postgres) with Row Level Security
 - Auth: Supabase Auth (Google / GitHub OAuth + email magic link)
 - AI: Anthropic Claude Opus 4.7 (image + text input)
-- Xiaohongshu scraping: cookie-authed HTTP request, parses `window.__INITIAL_STATE__`
+- RedNote scraping: cookie-authed HTTP request, parses `window.__INITIAL_STATE__`
 
 ### Install on phone
 
@@ -184,9 +184,9 @@ SUPABASE_SECRET_KEY=sb_secret_...
 PORT=3001
 ```
 
-#### 2. Xiaohongshu cookies → `backend/cookies.txt`
+#### 2. RedNote cookies → `backend/cookies.txt`
 
-1. Log into https://www.xiaohongshu.com in Chrome
+1. Log into https://www.rednote.com in Chrome
 2. F12 → Console → run `copy(document.cookie)`
 3. Paste into `backend/cookies.txt`
 

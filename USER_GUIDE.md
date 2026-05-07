@@ -100,7 +100,7 @@ Three ways to sign in:
 ### 📱 Main Features
 
 #### 1. Extract Recipe (Extract Tab)
-- **Function**: Extract structured recipe from Xiaohongshu (RED) links with one click
+- **Function**: Extract structured recipe from RedNote (RED) links with one click
 - **How to use**:
   1. Go to "Extract" tab and paste a RED post link or recipe text
   2. System automatically parses and generates a structured recipe
