@@ -332,6 +332,42 @@ export async function listPlans(client, fromDate, toDate) {
   }));
 }
 
+export async function listMealServings(client, fromDate, toDate) {
+  let q = client.from('meal_servings').select('plan_date, meal_type, servings');
+  if (fromDate) q = q.gte('plan_date', fromDate);
+  if (toDate) q = q.lte('plan_date', toDate);
+  const { data, error } = await q;
+  if (error) throw new Error('读取份数失败：' + error.message);
+  return (data || []).map((r) => ({
+    date: r.plan_date,
+    mealType: r.meal_type,
+    servings: Number(r.servings),
+  }));
+}
+
+export async function upsertMealServings(client, userId, date, mealType, servings) {
+  const { data, error } = await client
+    .from('meal_servings')
+    .upsert(
+      { user_id: userId, plan_date: date, meal_type: mealType, servings, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,plan_date,meal_type' }
+    )
+    .select()
+    .single();
+  if (error) throw new Error('保存份数失败：' + error.message);
+  return { date: data.plan_date, mealType: data.meal_type, servings: Number(data.servings) };
+}
+
+export async function deleteMealServings(client, date, mealType) {
+  const { error } = await client
+    .from('meal_servings')
+    .delete()
+    .eq('plan_date', date)
+    .eq('meal_type', mealType);
+  if (error) throw new Error('删除份数失败：' + error.message);
+  return true;
+}
+
 export async function updatePlanCooked(client, id, cooked) {
   const { data, error } = await client
     .from('meal_plans')
