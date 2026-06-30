@@ -3,6 +3,7 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import 'dotenv/config';
 import { fetchXhsPost } from './lib/xhs.js';
+import { extractVideoFrames } from './lib/video.js';
 import { mirrorImage } from './lib/storage.js';
 import {
   clientForUser, adminClient,
@@ -26,6 +27,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const RECIPE_PROMPT = `你是一位专业的中文菜谱整理师。请仔细分析这个小红书帖子（图片 + 文字），识别其中包含的所有菜品。
 
 **重要**：一个帖子可能包含一道菜或多道菜（合集/食谱集）。请逐一识别每一道独立的菜品。
+
+**忠实原文（最重要）**：只提取图片、视频截图和正文里**真实出现**的信息。视频截图里的字幕/旁白是步骤和调料用量的主要来源，请**逐帧仔细阅读上面的文字**。看不清的用量写「适量」，**绝不要凭经验编造**调料构成、用量或步骤——宁可留空也不要猜。
 
 请严格以 JSON 格式返回（不要 markdown 代码块），结构是一个数组，每个元素是一道菜：
 {
@@ -115,11 +118,30 @@ app.post('/api/recipe/from-link', requireAuth, async (req, res) => {
     const imageUrls = (post.images || []).slice(0, MAX_IMAGES);
     const imageBlocks = (await Promise.all(imageUrls.map(fetchImageBlock))).filter(Boolean);
 
+    // 视频帖：抽取逐帧截图，把视频里的字幕/步骤喂给模型（治本，避免编造）。
+    // 抽帧失败（如服务器无 ffmpeg）时降级为仅用配图，不阻断提取。
+    let frameBlocks = [];
+    if (post.type === 'video' && post.videoUrl) {
+      try {
+        frameBlocks = await extractVideoFrames(post.videoUrl);
+      } catch (e) {
+        console.warn('视频抽帧失败，降级为仅用图片：', e.message);
+      }
+    }
+
+    const idxHint = imageBlocks.length > 0
+      ? `配图共 ${imageBlocks.length} 张（index 0 到 ${imageBlocks.length - 1}），imageIndex 只能从这些配图里选。`
+      : '本帖无可用配图，imageIndex 一律填 0。';
+    const frameHint = frameBlocks.length > 0
+      ? `另附 ${frameBlocks.length} 张视频逐帧截图（紧随配图之后），是步骤和调料的主要来源，请逐帧阅读字幕、以视频内容为准；这些截图不参与 imageIndex。`
+      : '';
+
     const content = [
       ...imageBlocks,
+      ...frameBlocks,
       {
         type: 'text',
-        text: `${RECIPE_PROMPT}\n\n---\n帖子标题：${post.title}\n作者：${post.author}\n正文：${post.desc}\n\n共输入 ${imageBlocks.length} 张图片（index 0 到 ${imageBlocks.length - 1}）。`,
+        text: `${RECIPE_PROMPT}\n\n---\n帖子标题：${post.title}\n作者：${post.author}\n正文：${post.desc}\n\n${idxHint}${frameHint}`,
       },
     ];
 
