@@ -160,7 +160,7 @@ main { padding: 32px 0 64px; }
   border: 1px solid;
 }
 .banner.error { background: #FBEFEC; border-color: var(--coral-soft); color: var(--coral); }
-.banner.success { background: #F1F3EE; border-color: #DDE3D5; color: #4A5640; }
+.banner.success { background: var(--sketch-mint-soft); border-color: var(--sketch-mint); color: var(--sketch-mint-deep); }
 
 /* Library */
 .folder-bar {
@@ -458,7 +458,7 @@ main { padding: 32px 0 64px; }
   background: var(--coral);
 }
 .cal-cell.selected .cal-dot { background: var(--cream); }
-.cal-cell.all-cooked .cal-dot { background: var(--ink-mute); }
+.cal-cell.all-cooked .cal-dot { background: var(--sketch-mint-deep); }
 
 .range-bar {
   background: var(--cream-card);
@@ -523,10 +523,10 @@ main { padding: 32px 0 64px; }
   box-sizing: border-box;
 }
 .heatmap-cell.level-0 { background: #FFFFFF; border-color: var(--line); }
-.heatmap-cell.level-1 { background: #F8E2D7; border-color: #F8E2D7; }
-.heatmap-cell.level-2 { background: #EFB196; border-color: #EFB196; }
-.heatmap-cell.level-3 { background: #D67B5C; border-color: #D67B5C; }
-.heatmap-cell.level-4 { background: var(--coral); border-color: var(--coral); }
+.heatmap-cell.level-1 { background: #DCEEE2; border-color: #DCEEE2; }
+.heatmap-cell.level-2 { background: var(--sketch-mint); border-color: var(--sketch-mint); }
+.heatmap-cell.level-3 { background: #6FB68B; border-color: #6FB68B; }
+.heatmap-cell.level-4 { background: var(--sketch-mint-deep); border-color: var(--sketch-mint-deep); }
 .heatmap-cell.future { opacity: 0.25; }
 .plan-cooked-toggle {
   font-size: 20px;
@@ -535,15 +535,15 @@ main { padding: 32px 0 64px; }
   flex-shrink: 0;
   line-height: 1;
 }
-.plan-cooked-toggle:hover { color: var(--coral); }
+.plan-cooked-toggle:hover { color: var(--sketch-mint-deep); }
 .plan-card.cooked {
-  opacity: 0.55;
+  opacity: 0.72;
 }
 .plan-card.cooked .plan-card-title {
   text-decoration: line-through;
 }
 .plan-card.cooked .plan-cooked-toggle {
-  color: var(--coral);
+  color: var(--sketch-mint-deep);
 }
 .plan-cards {
   display: flex;
@@ -606,9 +606,9 @@ main { padding: 32px 0 64px; }
   box-shadow: 0 8px 24px rgba(42, 38, 34, 0.06);
 }
 .card.selected {
-  background: #E6F4FF;
-  border-color: #91CAFF;
-  box-shadow: 0 0 0 1px #1890FF inset;
+  background: var(--coral-soft);
+  border-color: var(--coral);
+  box-shadow: 0 0 0 1px var(--coral) inset;
 }
 .card-title {
   font-family: 'Fraunces', Georgia, serif;
@@ -847,6 +847,12 @@ main { padding: 32px 0 64px; }
   --sketch-coral: #D85C42;
   --sketch-yellow: #F2C94C;
   --sketch-mint: #A8D5BA;
+  /* Mint carries the whole "done / positive" story: success, cooked, heatmap.
+     -deep is readable as text/stroke on paper; -soft is a tint for fills. */
+  --sketch-mint-deep: #3E7A55;
+  --sketch-mint-soft: #E8F3EC;
+  /* One shadow ink for every offset shadow, so the whole sketch reads as one hand. */
+  --sketch-shadow: rgba(43, 38, 34, 0.9);
 }
 
 body {
@@ -899,7 +905,7 @@ body {
   border-radius: 14px 18px 12px 16px / 16px 12px 18px 14px;
   border: 2px solid var(--sketch-line) !important;
   background-color: var(--paper-card);
-  box-shadow: 3px 3px 0 0 rgba(43, 38, 34, 0.9);
+  box-shadow: 3px 3px 0 0 var(--sketch-shadow);
   transition: transform .15s ease, box-shadow .15s ease;
 }
 
@@ -913,18 +919,18 @@ body {
   background: var(--paper-card);
   color: var(--sketch-ink);
   font-family: 'Inter', sans-serif;
-  font-weight: 400;
-  font-size: 16px;
-  letter-spacing: 0.5px;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.2px;
 }
 .btn:hover:not(:disabled) {
   background: var(--paper-card);
   transform: translate(-1px, -1px);
-  box-shadow: 4px 4px 0 0 rgba(43,38,34,0.9);
+  box-shadow: 4px 4px 0 0 var(--sketch-shadow);
 }
 .btn:active:not(:disabled) {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 0 rgba(43,38,34,0.9);
+  box-shadow: 1px 1px 0 0 var(--sketch-shadow);
 }
 .btn.coral {
   background: var(--sketch-coral);
@@ -957,7 +963,15 @@ body {
 .card:nth-child(even) { transform: rotate(0.5deg); }
 .card:hover {
   transform: rotate(0deg) translate(-2px, -2px);
-  box-shadow: 5px 5px 0 0 rgba(43,38,34,0.9);
+  box-shadow: 5px 5px 0 0 var(--sketch-shadow);
+}
+/* Selected reads in the sketch language: coral double-stroke + coral offset
+   shadow, straightened out so picked cards visibly "pop forward". */
+.card.selected {
+  background: #FFF7EC;
+  border-color: var(--sketch-coral) !important;
+  box-shadow: 4px 4px 0 0 var(--sketch-coral) !important;
+  transform: rotate(0deg) translate(-1px, -1px);
 }
 
 .card-img {
@@ -982,7 +996,7 @@ body {
 .header { border-bottom: 2px dashed var(--sketch-line); }
 
 .banner.error { background: #FFEDE7; color: var(--sketch-coral); }
-.banner.success { background: #EAF4EE; color: #3F6B4F; }
+.banner.success { background: var(--sketch-mint-soft); color: var(--sketch-mint-deep); }
 
 .plan-day.today {
   border-color: var(--sketch-coral) !important;
@@ -996,7 +1010,7 @@ body {
   font-size: 16px;
   border-radius: 32px 36px 30px 34px / 34px 30px 36px 32px;
 }
-.cart-fab:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 0 rgba(43,38,34,0.9); }
+.cart-fab:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 0 var(--sketch-shadow); }
 
 .cart-count { background: var(--sketch-yellow); color: var(--sketch-ink); }
 
@@ -1028,4 +1042,37 @@ input.input::placeholder { color: var(--sketch-ink-soft); font-style: italic; }
   border-radius: 50% 60% 40% 50%;
   transform: rotate(-1deg);
 }
+
+/* ---- Secondary surfaces: pull them into the same hand ----
+   These still used the old 1px editorial border, so they read as a
+   different design system next to the sketch cards/buttons. Give them the
+   same wobbly double-stroke (lighter shadow = smaller element in the depth
+   scale) so the whole page feels drawn by one person. */
+.tip,
+.plan-card {
+  border: 2px solid var(--sketch-line);
+  border-radius: 12px 16px 14px 18px / 16px 14px 18px 12px;
+  background: var(--paper-card);
+  box-shadow: 2px 2px 0 0 var(--sketch-shadow);
+}
+.tag {
+  border: 2px solid var(--sketch-line);
+  background: var(--paper-card);
+  color: var(--sketch-ink);
+  font-weight: 500;
+  border-radius: 16px 20px 18px 22px / 20px 16px 22px 18px;
+}
+.step-tip {
+  border: 2px dashed var(--sketch-coral);
+  background: #FFF3EC;
+  color: var(--sketch-ink-soft);
+  border-radius: 10px 14px 12px 16px / 14px 10px 16px 12px;
+}
+.step-num { color: var(--sketch-coral); }
+.sheet-close {
+  border: 2px solid var(--sketch-line) !important;
+  box-shadow: 2px 2px 0 0 var(--sketch-shadow);
+  color: var(--sketch-ink);
+}
+.sheet-close:hover { transform: translate(-1px, -1px); }
 
