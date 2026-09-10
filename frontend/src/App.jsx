@@ -41,7 +41,7 @@ function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRem
   );
 }
 
-const XHS_URL_RE = /https?:\/\/(?:[\w-]+\.)*(?:xiaohongshu\.com|xhslink\.com)\/[^\s　-〿＀-￯，。！？【】「」『』〔〕()（）]+/i;
+const XHS_URL_RE = /https?:\/\/(?:[\w-]+\.)*(?:xiaohongshu\.com|xhslink\.com|xhslink\.cn)\/[^\s　-〿＀-￯，。！？【】「」『』〔〕()（）]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
 // Newly-extracted recipes mirror covers into Supabase Storage at save time,
