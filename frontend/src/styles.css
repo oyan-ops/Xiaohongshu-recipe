@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+/* Fonts are loaded via <link> in index.html to avoid render-blocking @import */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 

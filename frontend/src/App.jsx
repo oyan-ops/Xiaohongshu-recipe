@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
-import { authFetch, apiUrl } from './api';
+import {
+  authFetch, apiUrl,
+  sbListFolders, sbListRecipes, sbGetRecipe,
+  sbDeleteRecipe, sbUpdateRecipeTitle, sbMoveRecipe, sbBatchMoveRecipes, sbBatchDeleteRecipes,
+  sbCreateFolder, sbRenameFolder, sbDeleteFolder, sbReorderFolders,
+} from './api';
 import { supabase } from './supabase';
 import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, arrayMove, horizontalListSortingStrategy } from '@dnd-kit/sortable';
@@ -36,7 +41,7 @@ function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRem
   );
 }
 
-const XHS_URL_RE = /https?:\/\/(?:www\.)?(?:xiaohongshu\.com|xhslink\.com)\/[^\s]+/i;
+const XHS_URL_RE = /https?:\/\/(?:[\w-]+\.)*(?:xiaohongshu\.com|xhslink\.com)\/[^\s　-〿＀-￯，。！？【】「」『』〔〕()（）]+/i;
 const extractXhsUrl = (t) => (t && t.match(XHS_URL_RE)?.[0]) || '';
 
 // Newly-extracted recipes mirror covers into Supabase Storage at save time,
@@ -300,9 +305,7 @@ function Main({ session }) {
   const cart = useCart();
 
   const loadFolders = async () => {
-    const res = await authFetch('/api/folders');
-    const data = await res.json();
-    const list = data.folders || [];
+    const list = await sbListFolders(session.user.id);
     setFolders(list);
     if (list.length > 0 && (!activeFolder || !list.find(f => f.id === activeFolder))) {
       setActiveFolder(list[0].id);
@@ -313,10 +316,7 @@ function Main({ session }) {
     setLoadingList(true);
     try {
       const target = folderId !== undefined ? folderId : activeFolder;
-      const path = target ? `/api/recipes?folder=${target}` : '/api/recipes';
-      const res = await authFetch(path);
-      const data = await res.json();
-      setRecipes(data.recipes || []);
+      setRecipes(await sbListRecipes(target));
     } finally { setLoadingList(false); }
   };
 
@@ -380,6 +380,7 @@ function Main({ session }) {
               active={activeFolder}
               setActive={setActiveFolder}
               reload={loadFolders}
+              userId={session.user.id}
             />
             <Library
               recipes={recipes}
@@ -493,7 +494,7 @@ function CartDrawer({ cart, onClose }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all(cart.ids.map(id => authFetch(`/api/recipes/${id}`).then(r => r.json()).then(d => d.recipe).catch(() => null)))
+    Promise.all(cart.ids.map(id => sbGetRecipe(id).catch(() => null)))
       .then(rs => { if (!cancelled) { setItems(rs.filter(Boolean)); setLoading(false); } });
     return () => { cancelled = true; };
   }, [cart.ids.join(',')]);
@@ -1156,9 +1157,7 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
   const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
-    authFetch('/api/recipes')
-      .then(r => r.json())
-      .then(d => { setRecipes(d.recipes || []); setLoading(false); });
+    sbListRecipes().then(recipes => { setRecipes(recipes); setLoading(false); });
   }, []);
 
   const filtered = recipes.filter(r => !q || (r.title || '').toLowerCase().includes(q.toLowerCase()));
@@ -1449,28 +1448,22 @@ function PlanShareModal({ initialDate, onClose, onMemberRemoved }) {
   );
 }
 
-function FolderBar({ folders, setFolders, active, setActive, reload }) {
+function FolderBar({ folders, setFolders, active, setActive, reload, userId }) {
   const [shareFor, setShareFor] = useState(null);
 
   const create = async () => {
     const name = prompt('文件夹名称');
     if (!name?.trim()) return;
-    const res = await authFetch('/api/folders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() }),
-    });
-    const data = await res.json();
-    if (data.folder) { await reload(); setActive(data.folder.id); }
+    const folder = await sbCreateFolder(name.trim(), userId);
+    await reload();
+    setActive(folder.id);
   };
 
   const rename = async (f, e) => {
     e.stopPropagation();
     const name = prompt('改名为', f.name);
     if (!name?.trim() || name.trim() === f.name) return;
-    await authFetch(`/api/folders/${f.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim() }),
-    });
+    await sbRenameFolder(f.id, name.trim());
     reload();
   };
 
@@ -1478,7 +1471,7 @@ function FolderBar({ folders, setFolders, active, setActive, reload }) {
     e.stopPropagation();
     if (folders.length <= 1) return alert('至少保留一个文件夹');
     if (!confirm(`删除文件夹「${f.name}」？里面的食谱会变成「无文件夹」。`)) return;
-    await authFetch(`/api/folders/${f.id}`, { method: 'DELETE' });
+    await sbDeleteFolder(f.id);
     if (active === f.id) setActive(folders.find(x => x.id !== f.id)?.id || null);
     reload();
   };
@@ -1497,10 +1490,7 @@ function FolderBar({ folders, setFolders, active, setActive, reload }) {
     const reordered = arrayMove(folders, oldIdx, newIdx);
     setFolders?.(reordered);
     try {
-      await authFetch('/api/folders/reorder', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: reordered.map(f => f.id) }),
-      });
+      await sbReorderFolders(userId, reordered.map(f => f.id));
     } catch (e) {
       reload();
     }
@@ -1681,10 +1671,10 @@ function Extract({ folders, activeFolder, onExtracted }) {
   const pasteAndExtract = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      const found = extractXhsUrl(text);
-      if (found) { setUrl(found); submit(found); }
-      else if (text?.trim()) { setUrl(text.trim()); setError('剪贴板里没有小红书链接'); }
-      else setError('剪贴板是空的');
+      if (!text?.trim()) { setError('剪贴板是空的'); return; }
+      const found = extractXhsUrl(text) || text.trim();
+      setUrl(found);
+      submit(found);
     } catch {
       setError('无法读取剪贴板,请手动粘贴');
     }
@@ -1786,20 +1776,14 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
   };
 
   const moveTo = async (recipeId, folderId) => {
-    await authFetch(`/api/recipes/${recipeId}/folder`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folderId }),
-    });
+    await sbMoveRecipe(recipeId, folderId);
     setSelected(null);
     reload();
   };
 
   const bulkMoveTo = async (folderId) => {
     if (selectedBatch.size === 0) return;
-    await authFetch(`/api/recipes/batch/move`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedBatch), folderId }),
-    });
+    await sbBatchMoveRecipes(Array.from(selectedBatch), folderId);
     setSelectedBatch(new Set());
     reload();
   };
@@ -1807,10 +1791,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
   const bulkDelete = async () => {
     if (selectedBatch.size === 0) return;
     if (!confirm(`确定删除选中的 ${selectedBatch.size} 道食谱？`)) return;
-    await authFetch(`/api/recipes/batch/delete`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedBatch) }),
-    });
+    await sbBatchDeleteRecipes(Array.from(selectedBatch));
     setSelectedBatch(new Set());
     setBatchMode(false);
     reload();
@@ -1824,14 +1805,13 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
   });
 
   const open = async (id) => {
-    const res = await authFetch(`/api/recipes/${id}`);
-    const data = await res.json();
-    setSelected(data.recipe);
+    const recipe = await sbGetRecipe(id);
+    setSelected(recipe);
   };
 
   const remove = async (id) => {
     if (!confirm('确定删除这条食谱？')) return;
-    await authFetch(`/api/recipes/${id}`, { method: 'DELETE' });
+    await sbDeleteRecipe(id);
     if (selected?.id === id) setSelected(null);
     reload();
   };
@@ -2003,12 +1983,7 @@ function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
     }
     setSaveTitle(true);
     try {
-      const res = await authFetch(`/api/recipes/${recipe.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: editTitle.trim() }),
-      });
-      if (!res.ok) throw new Error('保存失败');
+      await sbUpdateRecipeTitle(recipe.id, editTitle.trim());
       recipe.title = editTitle.trim();
       setEditingTitle(false);
     } catch (e) {
