@@ -10,6 +10,27 @@ import { DndContext, PointerSensor, TouchSensor, useSensor, useSensors, closestC
 import { SortableContext, useSortable, arrayMove, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+// iOS 独立 web app 模式下，position:fixed 的弹层若不锁定 body 滚动，
+// 会按打开前的滚动位置错位渲染，导致弹窗要往下翻很久才能看到。
+function useBodyScrollLock() {
+  useEffect(() => {
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const prevPosition = body.style.position;
+    const prevTop = body.style.top;
+    const prevWidth = body.style.width;
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    return () => {
+      body.style.position = prevPosition;
+      body.style.top = prevTop;
+      body.style.width = prevWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, []);
+}
+
 function SortableFolderPill({ folder, active, onSelect, onShare, onRename, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: folder.id, disabled: !folder.isOwner });
   const style = {
@@ -423,6 +444,7 @@ function Main({ session }) {
 }
 
 function InviteClipboardModal({ token, type, onClose }) {
+  useBodyScrollLock();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [info, setInfo] = useState(null);
@@ -485,6 +507,7 @@ function InviteClipboardModal({ token, type, onClose }) {
 }
 
 function CartDrawer({ cart, onClose }) {
+  useBodyScrollLock();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('list');
@@ -1111,6 +1134,7 @@ function PlanView({ cart, mode, session, folders }) {
 }
 
 function RecipePickerModal({ date, onClose, onConfirm }) {
+  useBodyScrollLock();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -1179,6 +1203,7 @@ function RecipePickerModal({ date, onClose, onConfirm }) {
 }
 
 function PlanShareModal({ initialDate, onClose, onMemberRemoved }) {
+  useBodyScrollLock();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -1482,6 +1507,7 @@ function FolderBar({ folders, setFolders, active, setActive, reload, userId }) {
 }
 
 function ShareModal({ folder, onClose }) {
+  useBodyScrollLock();
   const [role, setRole] = useState('editor');
   const [ttl, setTtl] = useState(7);
   const [link, setLink] = useState('');
@@ -1928,6 +1954,7 @@ function Library({ recipes, loading, reload, folders, activeFolder, session, car
 }
 
 function RecipeDetail({ recipe, folders, addedBy, onClose, onDelete, onMove }) {
+  useBodyScrollLock();
   const otherFolders = (folders || []).filter(f => f.id !== recipe.folderId);
   const [planDate, setPlanDate] = useState(todayISO());
   const [planAdded, setPlanAdded] = useState(false);
