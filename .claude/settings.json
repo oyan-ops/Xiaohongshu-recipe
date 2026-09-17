@@ -3,7 +3,14 @@
     "allow": [
       "Bash(curl -s http://localhost:5173)",
       "Bash(pkill -f \"npm run dev\")",
-      "Bash(node -c backend/server.js)"
+      "Bash(node -c backend/server.js)",
+      "Bash(cd /Users/oliviayan/Desktop/Projects/xiaohongshu-recipe/backend)",
+      "Bash(mktemp -d)",
+      "Bash(ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=duration=15:size=640x480:rate=10 -pix_fmt yuv420p __TRACKED_VAR__/v.mp4)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(node --check server.js)",
+      "Bash(node --check lib/video.js)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)"
     ],
     "additionalDirectories": [
       "/Users/oliviayan/.claude/plans",

@@ -1,0 +1,18 @@
+name: Supabase keepalive
+
+on:
+  schedule:
+    # 每 3 天跑一次，远小于 Supabase 免费版 7 天无活动暂停的阈值
+    - cron: '0 3 */3 * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          curl --fail --silent --show-error \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/recipes?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
