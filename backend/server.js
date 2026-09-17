@@ -12,7 +12,6 @@ import {
   createInvite, readInvite, acceptInvite,
   getFolderMembers, removeFolderMember, getUserProfiles,
   listPlans, createPlan, deletePlan, updatePlanCooked,
-  listMealServings, upsertMealServings, deleteMealServings,
   createPlanInvite, readPlanInvite, acceptPlanInvite, listPlanMembers, removePlanMember, listSharedOwners,
 } from './lib/db.js';
 
@@ -476,8 +475,7 @@ app.get('/api/plans', requireAuth, async (req, res) => {
       }
     }
 
-    const servings = await listMealServings(req.client, fromDate, toDate);
-    res.json({ plans: allPlans, servings });
+    res.json({ plans: allPlans });
     // 后台异步评估未评分的菜谱，不阻塞用户请求
     (async () => {
       try {
@@ -575,23 +573,6 @@ app.delete('/api/plans/members/:userId', requireAuth, async (req, res) => {
     const ok = await removePlanMember(adminClient(), req.userId, req.params.userId);
     if (!ok) return res.status(404).json({ error: '该成员不存在' });
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put('/api/meal-servings', requireAuth, async (req, res) => {
-  try {
-    const { date, mealType, servings } = req.body || {};
-    if (!date || !mealType) return res.status(400).json({ error: '缺少 date 或 mealType' });
-    if (servings === null || servings === undefined || servings === '') {
-      await deleteMealServings(req.client, date, mealType);
-      return res.json({ success: true, cleared: true });
-    }
-    const n = Number(servings);
-    if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'servings 必须为正数' });
-    const row = await upsertMealServings(req.client, req.userId, date, mealType, n);
-    res.json({ servings: row });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -677,13 +677,7 @@ function parseMinutes(s) {
   return mins;
 }
 
-function parseServingsNumber(s) {
-  if (!s) return null;
-  const m = String(s).match(/(\d+(?:\.\d+)?)/);
-  return m ? Number(m[1]) : null;
-}
-
-function HeatMap({ plans, servingsMap = {} }) {
+function HeatMap({ plans }) {
   // 12 weeks ending today, oldest column on the left.
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const offsetSinceMonday = (today.getDay() + 6) % 7; // monday=0
@@ -701,13 +695,6 @@ function HeatMap({ plans, servingsMap = {} }) {
       w = r.effortMinutes * diffMult;
     } else {
       w = parseMinutes(r.cookTime);
-    }
-    // 用户填的当餐份数 / 食谱基础份数 作为强度缩放；缺失时按基础份数处理（系数 1）。
-    const mealType = p.mealType || 'dinner';
-    const userServings = servingsMap[`${p.date}|${mealType}`];
-    if (userServings && userServings > 0) {
-      const base = parseServingsNumber(r.servings) || 2;
-      w *= userServings / base;
     }
     workloadByDate[p.date] = (workloadByDate[p.date] || 0) + w;
   }
@@ -857,7 +844,6 @@ function RangeAddBar({ plans, today, onAdd }) {
 
 function PlanView({ cart, mode, session, folders }) {
   const [plans, setPlans] = useState([]);
-  const [servingsMap, setServingsMap] = useState({}); // key: `${date}|${mealType}` -> number
   const [loading, setLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(null);
   const [showShare, setShowShare] = useState(false);
@@ -886,9 +872,6 @@ function PlanView({ cart, mode, session, folders }) {
       const res = await authFetch(url);
       const data = await res.json();
       setPlans(data.plans || []);
-      const sm = {};
-      for (const s of (data.servings || [])) sm[`${s.date}|${s.mealType}`] = Number(s.servings);
-      setServingsMap(sm);
       // Collect owner IDs and fetch their profiles
       const ownerIds = Array.from(new Set((data.plans || []).map(p => p.ownerId).filter(Boolean)));
       if (ownerIds.length > 0) {
@@ -915,17 +898,6 @@ function PlanView({ cart, mode, session, folders }) {
       body: JSON.stringify({ cooked: !plan.cooked }),
     });
     load();
-  };
-  const saveServings = async (date, mealType, value) => {
-    const key = `${date}|${mealType}`;
-    const next = { ...servingsMap };
-    if (value === '' || value === null) delete next[key];
-    else next[key] = Number(value);
-    setServingsMap(next);
-    await authFetch('/api/meal-servings', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, mealType, servings: value === '' ? null : Number(value) }),
-    });
   };
   const addAllToCart = (recipeIds) => {
     for (const id of recipeIds) if (!cart.has(id)) cart.toggle(id);
@@ -974,7 +946,7 @@ function PlanView({ cart, mode, session, folders }) {
 
       {mode === 'history' && (
         <>
-          <HeatMap plans={plans.filter(p => !p.ownerId || p.ownerId === session?.user?.id)} servingsMap={servingsMap} />
+          <HeatMap plans={plans.filter(p => !p.ownerId || p.ownerId === session?.user?.id)} />
           <TopRecipes plans={plans.filter(p => !p.ownerId || p.ownerId === session?.user?.id)} />
         </>
       )}
@@ -1061,18 +1033,6 @@ function PlanView({ cart, mode, session, folders }) {
                       <div key={meal.key} style={{ marginBottom: 20 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                           <span style={{ fontWeight: 600, fontSize: 14 }}>{meal.label}</span>
-                          {mealPlans.length > 0 && (
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--ink-soft)' }}>
-                              <input
-                                type="number" min="0.5" step="0.5"
-                                value={servingsMap[`${selectedDate}|${meal.key}`] ?? ''}
-                                placeholder="份数"
-                                onChange={(e) => saveServings(selectedDate, meal.key, e.target.value)}
-                                style={{ width: 56, padding: '2px 6px', fontSize: 12, border: '1px solid var(--line)', borderRadius: 4 }}
-                              />
-                              <span>人份</span>
-                            </label>
-                          )}
                           {mode === 'plan' && (
                             <button className="btn coral" style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: 12 }}
                               onClick={() => { setPendingMealType(meal.key); setShowPicker(selectedDate); }}>+ 加菜</button>
